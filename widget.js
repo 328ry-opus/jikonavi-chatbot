@@ -208,6 +208,7 @@
       .jn-input-area {
         padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
       }
+      .jn-input { font-size: 16px; }
     }
 
     @keyframes jn-fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
