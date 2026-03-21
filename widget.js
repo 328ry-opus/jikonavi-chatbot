@@ -183,15 +183,31 @@
       font-size: 12px; text-align: center; font-weight: 600;
     }
 
+    /* Header close button (mobile only) */
+    .jn-header-close {
+      display: none;
+      margin-left: auto;
+      background: none; border: none; color: #fff;
+      width: 32px; height: 32px; cursor: pointer;
+      border-radius: 50%; flex-shrink: 0;
+    }
+    .jn-header-close:hover { background: rgba(255,255,255,0.2); }
+    .jn-header-close svg { width: 20px; height: 20px; }
+
     /* Mobile */
     @media (max-width: 480px) {
       .jn-window {
-        bottom: 0; right: 0; left: 0;
+        bottom: 0; right: 0; left: 0; top: 0;
         width: 100%; height: 100%;
         border-radius: 0;
       }
       .jn-trigger-wrap { bottom: 16px; right: 16px; }
+      .jn-trigger-wrap.open .jn-trigger { display: none; }
       .jn-trigger-label { font-size: 12px; padding: 6px 12px 6px 10px; }
+      .jn-header-close { display: flex; align-items: center; justify-content: center; }
+      .jn-input-area {
+        padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+      }
     }
 
     @keyframes jn-fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
@@ -236,6 +252,7 @@
           <h3>${CONFIG.botName}</h3>
           <p>交通事故のご相談チャット</p>
         </div>
+        <button class="jn-header-close" aria-label="閉じる">${ICON_CLOSE}</button>
       </div>
       <div class="jn-ai-banner" style="display:none;">✨ AI対応モード — 自由に質問できます</div>
       <div class="jn-messages"></div>
@@ -509,6 +526,7 @@
   }
 
   trigger.addEventListener('click', toggle);
+  container.querySelector('.jn-header-close').addEventListener('click', toggle);
 
   // ── Init ────────────────────────────────────────────────
   async function initChat() {
