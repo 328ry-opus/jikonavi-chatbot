@@ -1,0 +1,53 @@
+{
+  "root": {
+    "message": "ご相談内容をお選びください。",
+    "options": [
+      { "label": "通院先を探している", "next": "find_clinic" },
+      { "label": "通院先を変更したい", "next": "change_clinic" },
+      { "label": "慰謝料について知りたい", "next": "compensation" },
+      { "label": "その他のご相談", "next": "other" },
+      { "label": "すぐに電話で相談したい", "next": "phone" },
+      { "label": "自由に質問する（AI対応）", "action": "switch_to_ai" }
+    ]
+  },
+  "find_clinic": {
+    "message": "事故なびでは、お住まいの地域やご希望に合った整骨院・接骨院をご紹介しています。自賠責保険が適用されるため、窓口での自己負担は原則0円です。\n\nお電話いただければ、専門スタッフがあなたに最適な通院先をお探しします。",
+    "options": [
+      { "label": "電話で相談する", "next": "phone" },
+      { "label": "他にも質問がある", "action": "switch_to_ai" },
+      { "label": "最初に戻る", "next": "root" }
+    ]
+  },
+  "change_clinic": {
+    "message": "通院先の変更は可能です。保険会社への連絡が必要ですが、通院先を選ぶのはご本人の自由です。\n\n「今の治療に不安がある」「通いにくい」など、どんな理由でもお気軽にご相談ください。事故なびが新しい通院先探しをお手伝いします。",
+    "options": [
+      { "label": "電話で相談する", "next": "phone" },
+      { "label": "他にも質問がある", "action": "switch_to_ai" },
+      { "label": "最初に戻る", "next": "root" }
+    ]
+  },
+  "compensation": {
+    "message": "交通事故の慰謝料は、通院日数や期間をもとに計算されます。自賠責基準では1日あたり4,300円が目安です。\n\n具体的な金額は個々の状況によって異なりますので、詳しくはお電話でご相談ください。",
+    "options": [
+      { "label": "電話で相談する", "next": "phone" },
+      { "label": "他にも質問がある", "action": "switch_to_ai" },
+      { "label": "最初に戻る", "next": "root" }
+    ]
+  },
+  "other": {
+    "message": "交通事故に関するお悩みなら、何でもお気軽にご相談ください。\n\nAIチャットで質問に回答することもできますし、お電話でスタッフが直接ご対応することも可能です。",
+    "options": [
+      { "label": "AIに質問する", "action": "switch_to_ai" },
+      { "label": "電話で相談する", "next": "phone" },
+      { "label": "最初に戻る", "next": "root" }
+    ]
+  },
+  "phone": {
+    "message": "お電話でのご相談はこちらから。専門スタッフが無料でご対応いたします。\n\n📞 0120-911-427\n受付時間：9:00〜21:00（年中無休）\n\nお気軽にお電話ください。",
+    "options": [
+      { "label": "他にも質問がある", "action": "switch_to_ai" },
+      { "label": "最初に戻る", "next": "root" }
+    ],
+    "phone_number": "0120-911-427"
+  }
+}
