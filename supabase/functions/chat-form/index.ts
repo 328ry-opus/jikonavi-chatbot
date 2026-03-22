@@ -97,6 +97,16 @@ serve(async (req) => {
       }
     }
 
+    // ── Normalize phone number ──────────────────────────
+    let phone = (form_data.phone || '').replace(/[\s\-\u2010-\u2015\u2212\uFF0D]/g, '').replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+    if (/^0[789]0\d{8}$/.test(phone)) {
+      phone = phone.slice(0, 3) + '-' + phone.slice(3, 7) + '-' + phone.slice(7);
+    } else if (/^0120\d{6}$/.test(phone)) {
+      phone = phone.slice(0, 4) + '-' + phone.slice(4, 7) + '-' + phone.slice(7);
+    } else if (/^0\d{9}$/.test(phone)) {
+      phone = phone.slice(0, 2) + '-' + phone.slice(2, 6) + '-' + phone.slice(6);
+    }
+
     // ── Create patient record in CRM ──────────────────────
     const now = new Date();
     const todayStr = now.toISOString().slice(0, 10);
@@ -116,7 +126,7 @@ serve(async (req) => {
       id: patientId,
       name_kanji: form_data.name || '',
       name_kana: '',
-      phone: form_data.phone || '',
+      phone,
       address: area,
       channel: 'chat',
       status: '問合せ受付',
