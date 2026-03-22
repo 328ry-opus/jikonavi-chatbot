@@ -197,7 +197,8 @@ serve(async (req) => {
     try {
       await fetch(GAS_WEBHOOK_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json; charset=utf-8', 'Accept': 'application/json' },
+        redirect: 'follow',
         body: JSON.stringify({
           name: form_data.name || '',
           phone,
