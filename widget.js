@@ -21,7 +21,7 @@
   // ── State ───────────────────────────────────────────────
   const state = {
     isOpen: false,
-    mode: 'scenario', // scenario | ai
+    mode: 'scenario', // scenario | form_input | ai
     scenarioData: null,
     messages: [],
     sessionId: crypto.randomUUID(),
@@ -29,6 +29,10 @@
     conversationHistory: [],
     isLoading: false,
     messageCount: 0,
+    formData: {},
+    currentFormField: null,
+    currentFormNext: null,
+    currentNodeId: null,
   };
 
   // ── Styles ──────────────────────────────────────────────
@@ -366,7 +370,29 @@
     const node = state.scenarioData[nodeId];
     if (!node) return;
 
+    // Handle submit action
+    if (node.action === 'submit_form') {
+      addMessage(node.message, 'bot');
+      submitForm();
+      return;
+    }
+
+    // Handle form input nodes (text/tel)
+    if (node.input_type) {
+      state.mode = 'form_input';
+      state.currentFormField = node.form_field;
+      state.currentFormNext = node.next;
+      aiBanner.style.display = 'none';
+      addMessage(node.message, 'bot');
+      setInputPlaceholder(node.input_placeholder || 'ここに入力...');
+      inputEl.type = node.input_type === 'tel' ? 'tel' : 'text';
+      inputEl.focus();
+      return;
+    }
+
+    // Normal scenario node with button options
     state.mode = 'scenario';
+    state.currentNodeId = nodeId;
     aiBanner.style.display = 'none';
     setInputPlaceholder('選択肢をお選びください');
 
@@ -377,9 +403,20 @@
   }
 
   function handleOptionClick(opt) {
-    // Record user selection
     addMessage(opt.label, 'user');
     clearOptions();
+
+    // Save form value if present
+    if (opt.form_value) {
+      const currentNode = state.scenarioData[state.currentNodeId];
+      if (currentNode && currentNode.form_field) {
+        state.formData[currentNode.form_field] = opt.form_value;
+      }
+      // Save inquiry type from root
+      if (state.currentNodeId === 'root') {
+        state.formData.inquiry_type = opt.form_value;
+      }
+    }
 
     if (opt.action === 'switch_to_ai') {
       switchToAiMode();
@@ -483,6 +520,22 @@
     if (!text || state.isLoading) return;
     inputEl.value = '';
 
+    if (state.mode === 'form_input') {
+      addMessage(text, 'user');
+      state.formData[state.currentFormField] = text;
+      if (state.currentFormField === 'name') {
+        state.userName = text;
+      }
+      const nextNode = state.currentFormNext;
+      inputEl.type = 'text';
+      inputEl.value = '';
+      requestAnimationFrame(() => {
+        inputEl.value = '';
+        showScenarioNode(nextNode);
+      });
+      return;
+    }
+
     if (state.mode === 'ai') {
       clearOptions();
       sendAiMessage(text);
@@ -494,6 +547,32 @@
       clearOptions();
       switchToAiMode();
       sendAiMessage(text);
+    }
+  }
+
+  // ── Form submission ────────────────────────────────────
+  async function submitForm() {
+    setLoadingState(true);
+    try {
+      const response = await fetch(CONFIG.edgeFunctionUrl.replace('/chat', '/chat-form'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: state.sessionId,
+          form_data: state.formData,
+          page_url: window.location.href,
+        }),
+      });
+
+      if (!response.ok) throw new Error('Submit failed');
+
+      showScenarioNode('complete');
+    } catch (err) {
+      console.error('Form submit error:', err);
+      addMessage('送信中にエラーが発生しました。お手数ですがお電話でご連絡ください。', 'bot');
+      showScenarioNode('phone');
+    } finally {
+      setLoadingState(false);
     }
   }
 
