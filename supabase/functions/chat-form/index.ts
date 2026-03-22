@@ -118,6 +118,37 @@ serve(async (req) => {
       }
     }
 
+    // ── Predict furigana from kanji name via Gemini ────────
+    let nameKana = form_data.name_kana || '';
+    if (!nameKana && form_data.name) {
+      try {
+        const apiKey = Deno.env.get('GEMINI_API_KEY');
+        if (apiKey) {
+          const res = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: `この人名のふりがなをひらがなのみで答えてください。余計な説明は不要です。\n${form_data.name}` }] }],
+                generationConfig: { temperature: 0, maxOutputTokens: 50 },
+              }),
+            },
+          );
+          if (res.ok) {
+            const json = await res.json();
+            const predicted = json?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+            if (predicted && /^[\u3040-\u309F\u30A0-\u30FF\s\u3000]+$/.test(predicted)) {
+              nameKana = predicted;
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Furigana prediction failed:', e);
+        // Non-critical, continue without kana
+      }
+    }
+
     // ── Create patient record in CRM ──────────────────────
     const now = new Date();
     const todayStr = now.toISOString().slice(0, 10);
@@ -136,7 +167,7 @@ serve(async (req) => {
     await supabase.from('patients').insert({
       id: patientId,
       name_kanji: form_data.name || '',
-      name_kana: form_data.name_kana || '',
+      name_kana: nameKana,
       phone,
       address: area,
       channel: 'chat',
