@@ -87,6 +87,16 @@ serve(async (req) => {
       message_type: 'form_submission',
     });
 
+    // ── Normalize area input ─────────────────────────────
+    let area = (form_data.area || '').trim();
+    // Add "駅" suffix if it looks like a station name without it
+    if (area && !area.endsWith('駅') && !area.endsWith('市') && !area.endsWith('区') && !area.endsWith('町') && !area.endsWith('村') && !area.endsWith('県') && !area.endsWith('府') && !area.endsWith('都') && !area.endsWith('道') && area.length <= 15) {
+      // Check if it's likely a station name (short text without address-like suffixes)
+      if (!/[0-9０-９丁目番地号]/.test(area)) {
+        area = area + '駅';
+      }
+    }
+
     // ── Create patient record in CRM ──────────────────────
     const now = new Date();
     const todayStr = now.toISOString().slice(0, 10);
@@ -97,7 +107,7 @@ serve(async (req) => {
       '【チャットbot経由】',
       form_data.inquiry_type ? `相談内容: ${form_data.inquiry_type}` : '',
       form_data.accident_type ? `事故状況: ${form_data.accident_type}` : '',
-      form_data.area ? `希望エリア: ${form_data.area}` : '',
+      area ? `希望エリア: ${area}` : '',
       form_data.contact_time ? `連絡希望: ${form_data.contact_time}` : '',
       page_url ? `送信元: ${page_url}` : '',
     ].filter(Boolean).join('\n');
@@ -107,7 +117,7 @@ serve(async (req) => {
       name_kanji: form_data.name || '',
       name_kana: '',
       phone: form_data.phone || '',
-      address: form_data.area || '',
+      address: area,
       channel: 'chat',
       status: '問合せ受付',
       staff: 'ookawa',

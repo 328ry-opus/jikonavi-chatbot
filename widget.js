@@ -564,6 +564,23 @@
     inputEl.value = '';
 
     if (state.mode === 'form_input') {
+      // Validate phone number
+      if (state.currentFormField === 'phone') {
+        const digits = text.replace(/[\s\-\u2010\u2011\u2012\u2013\u2014\u2015\u2212\uFF0D]/g, '').replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+        if (!/^0\d{9,10}$/.test(digits)) {
+          addMessage('電話番号の形式が正しくないようです。\n例：090-1234-5678', 'bot');
+          scrollToBottom();
+          return;
+        }
+      }
+      // Validate name (at least 2 chars, no digits only)
+      if (state.currentFormField === 'name') {
+        if (text.length < 2 || /^\d+$/.test(text)) {
+          addMessage('お名前を正しく入力してください。', 'bot');
+          scrollToBottom();
+          return;
+        }
+      }
       addMessage(text, 'user');
       state.formData[state.currentFormField] = text;
       if (state.currentFormField === 'name') {
