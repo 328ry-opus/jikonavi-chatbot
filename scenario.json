@@ -47,8 +47,16 @@
       { "label": "午前（9:00〜12:00）", "next": "confirm", "form_value": "午前" },
       { "label": "午後（12:00〜17:00）", "next": "confirm", "form_value": "午後" },
       { "label": "夕方以降（17:00〜21:00）", "next": "confirm", "form_value": "夕方以降" },
-      { "label": "いつでもOK", "next": "confirm", "form_value": "いつでもOK" }
+      { "label": "いつでもOK", "next": "confirm", "form_value": "いつでもOK" },
+      { "label": "希望を入力する", "next": "ask_contact_time_free" }
     ]
+  },
+  "ask_contact_time_free": {
+    "message": "ご希望の時間帯を入力してください。",
+    "form_field": "contact_time",
+    "input_type": "text",
+    "input_placeholder": "例：平日18時以降、水曜の午前中など",
+    "next": "confirm"
   },
   "confirm": {
     "message": "ありがとうございます！入力内容を確認しています...",
