@@ -1,6 +1,6 @@
 {
   "root": {
-    "message": "ご相談内容をお選びください。",
+    "message": "どのようなご相談ですか？",
     "options": [
       { "label": "通院先を探している", "next": "find_clinic" },
       { "label": "通院先を変更したい", "next": "change_clinic" },

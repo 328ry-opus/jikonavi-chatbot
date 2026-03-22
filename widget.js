@@ -12,16 +12,16 @@
     brandColor: '#1a5995',
     accentColor: '#027c96',
     widgetWidth: 380,
-    widgetHeight: 540,
+    widgetHeight: 640,
     maxInputLength: 500,
     botName: '事故なび',
-    greeting: 'こんにちは！事故なびの相談チャットです。\nお名前を教えていただけますか？',
+    greeting: '交通事故に遭われた方へ\n\n通院前に事故なびへ無料相談すると、お見舞金 最大50,000円をお受け取りいただけます。\nまずはお気軽にご相談ください。',
   };
 
   // ── State ───────────────────────────────────────────────
   const state = {
     isOpen: false,
-    mode: 'name_input', // name_input | scenario | ai
+    mode: 'scenario', // scenario | ai
     scenarioData: null,
     messages: [],
     sessionId: crypto.randomUUID(),
@@ -43,8 +43,8 @@
 
     .jn-trigger-label {
       background: #fff; color: ${CONFIG.brandColor};
-      font-size: 13px; font-weight: 600; line-height: 1.4;
-      padding: 8px 20px 8px 14px; border-radius: 20px;
+      font-size: 15px; font-weight: 600; line-height: 1.4;
+      padding: 10px 24px 10px 16px; border-radius: 22px;
       margin-right: -12px;
       box-shadow: 0 4px 16px rgba(0,0,0,0.12);
       white-space: nowrap;
@@ -53,7 +53,7 @@
     .jn-trigger-wrap.open .jn-trigger-label { display: none; }
 
     .jn-trigger {
-      width: 72px; height: 72px; border-radius: 50%;
+      width: 84px; height: 84px; border-radius: 50%;
       background: ${CONFIG.brandColor}; color: #fff;
       border: none; cursor: pointer; display: flex; align-items: center; justify-content: center;
       box-shadow: 0 4px 16px rgba(0,0,0,0.2);
@@ -61,7 +61,7 @@
       position: relative; flex-shrink: 0;
     }
     .jn-trigger:hover { transform: scale(1.08); box-shadow: 0 6px 20px rgba(0,0,0,0.25); }
-    .jn-trigger svg { width: 32px; height: 32px; }
+    .jn-trigger svg { width: 36px; height: 36px; }
     .jn-trigger.open svg.icon-chat { display: none; }
     .jn-trigger:not(.open) svg.icon-close { display: none; }
 
@@ -131,10 +131,10 @@
     .jn-msg.user .jn-msg-bubble { background: ${CONFIG.brandColor}; color: #fff; border-bottom-right-radius: 4px; }
 
     /* Options (scenario buttons) */
-    .jn-options { display: flex; flex-direction: column; gap: 8px; padding: 0 16px 8px; animation: jn-fadeIn 0.3s ease; }
+    .jn-options { display: flex; flex-direction: column; gap: 6px; padding: 0 16px 8px; animation: jn-fadeIn 0.3s ease; }
     .jn-option-btn {
       background: #fff; border: 1.5px solid ${CONFIG.brandColor}; color: ${CONFIG.brandColor};
-      padding: 10px 16px; border-radius: 10px; font-size: 14px; font-weight: 600;
+      padding: 7px 14px; border-radius: 10px; font-size: 13px; font-weight: 600;
       cursor: pointer; text-align: left; transition: all 0.15s;
     }
     .jn-option-btn:hover { background: ${CONFIG.brandColor}; color: #fff; }
@@ -240,7 +240,7 @@
 
   container.innerHTML = `
     <div class="jn-trigger-wrap">
-      <div class="jn-trigger-label">チャットでご相談・<br>ご質問ができます</div>
+      <div class="jn-trigger-label">お見舞金について<br>チャットで相談</div>
       <button class="jn-trigger" aria-label="チャットを開く">
         ${ICON_CHAT}${ICON_CLOSE}
         <div class="jn-badge"></div>
@@ -284,7 +284,7 @@
   }
 
   function addMessage(text, sender) {
-    const avatar = sender === 'bot' ? ICON_OPERATOR : (state.userName ? state.userName[0] : 'あ');
+    const avatar = sender === 'bot' ? ICON_OPERATOR : '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>';
     const msg = document.createElement('div');
     msg.className = `jn-msg ${sender}`;
     msg.innerHTML = `
@@ -483,14 +483,6 @@
     if (!text || state.isLoading) return;
     inputEl.value = '';
 
-    if (state.mode === 'name_input') {
-      state.userName = text;
-      addMessage(text, 'user');
-      addMessage(`${text}さん、ご相談ありがとうございます。`, 'bot');
-      showScenarioNode('root');
-      return;
-    }
-
     if (state.mode === 'ai') {
       clearOptions();
       sendAiMessage(text);
@@ -539,10 +531,11 @@
       const res = await fetch(baseUrl + 'scenario.json');
       state.scenarioData = await res.json();
     } catch (e) {
+      console.error('Jikonavi: scenario.json load failed', e);
       // Fallback: inline minimal scenario
       state.scenarioData = {
         root: {
-          message: 'ご相談内容をお選びください。',
+          message: 'どのようなご相談ですか？',
           options: [
             { label: '自由に質問する（AI対応）', action: 'switch_to_ai' },
           ],
@@ -550,9 +543,8 @@
       };
     }
 
-    state.mode = 'name_input';
-    setInputPlaceholder('お名前を入力してください');
     addMessage(CONFIG.greeting, 'bot');
+    showScenarioNode('root');
     // Hide badge after first open
     badge.style.display = 'none';
   }
