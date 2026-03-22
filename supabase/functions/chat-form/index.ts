@@ -100,11 +100,22 @@ serve(async (req) => {
     // ── Normalize phone number ──────────────────────────
     let phone = (form_data.phone || '').replace(/[\s\-\u2010-\u2015\u2212\uFF0D]/g, '').replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
     if (/^0[789]0\d{8}$/.test(phone)) {
+      // Mobile: 090-1234-5678
       phone = phone.slice(0, 3) + '-' + phone.slice(3, 7) + '-' + phone.slice(7);
     } else if (/^0120\d{6}$/.test(phone)) {
+      // Toll-free: 0120-123-456
       phone = phone.slice(0, 4) + '-' + phone.slice(4, 7) + '-' + phone.slice(7);
     } else if (/^0\d{9}$/.test(phone)) {
-      phone = phone.slice(0, 2) + '-' + phone.slice(2, 6) + '-' + phone.slice(6);
+      // Landline: detect area code length by prefix
+      // 2-digit area: 03, 06
+      // 3-digit area: 011, 022, 025, 027, 028, 029, 042, 043, 044, 045, 046, 047, 048, 052, 053, 054, 055, 058, 072, 073, 075, 076, 077, 078, 079, 082, 083, 084, 086, 087, 088, 089, 092, 093, 095, 096, 097, 098, 099
+      const prefix2 = phone.slice(0, 2);
+      if (prefix2 === '03' || prefix2 === '06') {
+        phone = phone.slice(0, 2) + '-' + phone.slice(2, 6) + '-' + phone.slice(6);
+      } else {
+        // 3-digit area code (most common for landlines)
+        phone = phone.slice(0, 3) + '-' + phone.slice(3, 6) + '-' + phone.slice(6);
+      }
     }
 
     // ── Create patient record in CRM ──────────────────────
