@@ -152,7 +152,7 @@ serve(async (req) => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                   contents: [{ parts: [{ text: `この日本人名のふりがなをひらがなのみで出力してください。他の文字や説明は一切不要です。\n${name}` }] }],
-                  generationConfig: { temperature: 0, maxOutputTokens: 50 },
+                  generationConfig: { temperature: 0, maxOutputTokens: 200, thinkingConfig: { thinkingBudget: 0 } },
                 }),
               },
             );
