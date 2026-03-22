@@ -136,7 +136,7 @@ serve(async (req) => {
     await supabase.from('patients').insert({
       id: patientId,
       name_kanji: form_data.name || '',
-      name_kana: '',
+      name_kana: form_data.name_kana || '',
       phone,
       address: area,
       channel: 'chat',

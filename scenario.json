@@ -24,6 +24,13 @@
     "form_field": "name",
     "input_type": "text",
     "input_placeholder": "例：山田 太郎",
+    "next": "ask_name_kana"
+  },
+  "ask_name_kana": {
+    "message": "ふりがなを教えてください。",
+    "form_field": "name_kana",
+    "input_type": "text",
+    "input_placeholder": "例：やまだ たろう",
     "next": "ask_phone"
   },
   "ask_phone": {

@@ -581,6 +581,14 @@
           return;
         }
       }
+      // Validate name_kana (hiragana/katakana + spaces only)
+      if (state.currentFormField === 'name_kana') {
+        if (text.length < 2 || /^\d+$/.test(text)) {
+          addMessage('ふりがなを正しく入力してください。\n例：やまだ たろう', 'bot');
+          scrollToBottom();
+          return;
+        }
+      }
       addMessage(text, 'user');
       state.formData[state.currentFormField] = text;
       if (state.currentFormField === 'name') {
