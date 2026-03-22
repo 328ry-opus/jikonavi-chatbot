@@ -141,7 +141,7 @@ serve(async (req) => {
       address: area,
       channel: 'chat',
       status: '問合せ受付',
-      staff: 'ookawa',
+      staff: 'ボット',
       inquiry_date: todayStr,
       inquiry_time: timeStr,
       next_date: todayStr,
