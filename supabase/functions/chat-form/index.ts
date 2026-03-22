@@ -121,16 +121,25 @@ serve(async (req) => {
     }
 
     // ── Resolve furigana (name_kana) ───────────────────────
-    let nameKana = form_data.name_kana || '';
+    const KANA_RE = /^[ぁ-ゖァ-ヺー 　]+$/u;
+    const HAS_KANJI = /\p{Script=Han}/u;
+
+    function sanitizeKana(v: unknown): string {
+      if (typeof v !== 'string') return '';
+      const s = v.normalize('NFKC').replace(/[ \t\r\n　]+/g, ' ').trim();
+      return (s && KANA_RE.test(s) && !HAS_KANJI.test(s)) ? s : '';
+    }
+
+    let nameKana = sanitizeKana(form_data.name_kana);
     let kanaPredicted = false;
-    const kanaRegex = /^[\u3040-\u309F\u30A0-\u30FF\u30FC\s\u3000]+$/;
 
     if (!nameKana && form_data.name) {
       const name = form_data.name.trim();
 
       // If name is already all kana, use it directly
-      if (kanaRegex.test(name)) {
-        nameKana = name;
+      const directKana = sanitizeKana(name);
+      if (directKana) {
+        nameKana = directKana;
       } else {
         // Name contains kanji — predict furigana via Gemini
         try {
@@ -142,7 +151,7 @@ serve(async (req) => {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                  contents: [{ parts: [{ text: `この人名のふりがなをひらがなのみで答えてください。余計な説明は不要です。\n${name}` }] }],
+                  contents: [{ parts: [{ text: `この日本人名のふりがなをひらがなのみで出力してください。他の文字や説明は一切不要です。\n${name}` }] }],
                   generationConfig: { temperature: 0, maxOutputTokens: 50 },
                 }),
               },
@@ -150,9 +159,12 @@ serve(async (req) => {
             if (res.ok) {
               const json = await res.json();
               const predicted = json?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-              if (predicted && kanaRegex.test(predicted)) {
-                nameKana = predicted;
+              const cleanKana = sanitizeKana(predicted);
+              if (cleanKana) {
+                nameKana = cleanKana;
                 kanaPredicted = true;
+              } else {
+                console.error('Gemini returned non-kana:', predicted);
               }
             } else {
               console.error('Gemini API error:', res.status, await res.text());
@@ -232,9 +244,9 @@ serve(async (req) => {
     if (linkError) console.error('Session link error:', linkError.message);
 
     // ── Send email notification via GAS webhook ─────────
-    const GAS_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbyRw5LahkEShM7VVEmCLQtduVNKTuBn-KiurNQSQUkgPV-ueUtNCk2_b4wgvuqgB2s9/exec';
+    const GAS_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbzofSQ-VgplXo4khyBfwgxPCkqIXB1XoOubiNQkvxYckesjPx8PSSCGnCvTY07X2E6x/exec';
     try {
-      await fetch(GAS_WEBHOOK_URL, {
+      const gasRes = await fetch(GAS_WEBHOOK_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json; charset=utf-8', 'Accept': 'application/json' },
         redirect: 'follow',
@@ -248,9 +260,13 @@ serve(async (req) => {
           page_url: page_url || '',
         }),
       });
+      const gasBody = await gasRes.text();
+      console.log('GAS webhook response:', { status: gasRes.status, body: gasBody.slice(0, 300) });
+      if (!gasRes.ok) {
+        console.error('GAS webhook non-2xx:', gasRes.status);
+      }
     } catch (e) {
       console.error('GAS notification failed:', e);
-      // Non-critical: don't fail the form submission if email fails
     }
 
     return new Response(
