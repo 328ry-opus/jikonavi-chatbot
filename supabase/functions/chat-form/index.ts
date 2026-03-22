@@ -244,7 +244,7 @@ serve(async (req) => {
     if (linkError) console.error('Session link error:', linkError.message);
 
     // ── Send email notification via GAS webhook ─────────
-    const GAS_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbzofSQ-VgplXo4khyBfwgxPCkqIXB1XoOubiNQkvxYckesjPx8PSSCGnCvTY07X2E6x/exec';
+    const GAS_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbxS1Hwp8HR87hE_w0bi53wqxKJKPEIswhaad_XO5AU1j8DalUf3c0tfl_ATcdJkoVbn/exec';
     try {
       const gasRes = await fetch(GAS_WEBHOOK_URL, {
         method: 'POST',
