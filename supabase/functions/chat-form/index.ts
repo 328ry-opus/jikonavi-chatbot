@@ -192,6 +192,27 @@ serve(async (req) => {
       converted: true,
     }).eq('session_id', session_id);
 
+    // ── Send email notification via GAS webhook ─────────
+    const GAS_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbxzQ8Q1FFE0-r_wCJ_ApqsgB4sZu2_mpah1ZmjtxIPkm0WJkTBaEgHtN-QpZL5FyBTM/exec';
+    try {
+      await fetch(GAS_WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: form_data.name || '',
+          phone,
+          area,
+          inquiry_type: form_data.inquiry_type || '',
+          accident_type: form_data.accident_type || '',
+          contact_time: form_data.contact_time || '',
+          page_url: page_url || '',
+        }),
+      });
+    } catch (e) {
+      console.error('GAS notification failed:', e);
+      // Non-critical: don't fail the form submission if email fails
+    }
+
     return new Response(
       JSON.stringify({ success: true, patient_id: patientId }),
       { status: 200, headers: { ...headers, 'Content-Type': 'application/json' } },
