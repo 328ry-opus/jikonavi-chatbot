@@ -435,10 +435,9 @@
     const prevNodeId = state.nodeHistory.pop();
     if (!prevNodeId) return;
     // Remove: current bot message, previous user answer, previous bot message
-    const msgs = messagesEl.querySelectorAll('.jn-msg');
-    const toRemove = Math.min(3, msgs.length);
-    for (let i = 0; i < toRemove; i++) {
-      msgs[msgs.length - 1 - i].remove();
+    for (let i = 0; i < 3; i++) {
+      const last = messagesEl.querySelector('.jn-msg:last-child');
+      if (last) last.remove();
     }
     clearOptions();
     inputEl.type = 'text';
