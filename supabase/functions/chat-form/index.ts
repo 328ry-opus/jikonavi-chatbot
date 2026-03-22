@@ -87,8 +87,48 @@ serve(async (req) => {
       message_type: 'form_submission',
     });
 
+    // ── Create patient record in CRM ──────────────────────
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10);
+    const timeStr = now.toTimeString().slice(0, 5);
+    const patientId = 'p' + Date.now();
+
+    const notes = [
+      '【チャットbot経由】',
+      form_data.inquiry_type ? `相談内容: ${form_data.inquiry_type}` : '',
+      form_data.accident_type ? `事故状況: ${form_data.accident_type}` : '',
+      form_data.area ? `希望エリア: ${form_data.area}` : '',
+      form_data.contact_time ? `連絡希望: ${form_data.contact_time}` : '',
+      page_url ? `送信元: ${page_url}` : '',
+    ].filter(Boolean).join('\n');
+
+    await supabase.from('patients').insert({
+      id: patientId,
+      name_kanji: form_data.name || '',
+      name_kana: '',
+      phone: form_data.phone || '',
+      address: form_data.area || '',
+      channel: 'chat',
+      status: '問合せ受付',
+      staff: 'ookawa',
+      inquiry_date: todayStr,
+      inquiry_time: timeStr,
+      next_date: todayStr,
+      notes,
+      check_permission: false,
+      check_clinic: false,
+      check_contacted: false,
+      check_sent: false,
+    });
+
+    // Link patient to chat session
+    await supabase.from('chat_sessions').update({
+      patient_id: patientId,
+      converted: true,
+    }).eq('session_id', session_id);
+
     return new Response(
-      JSON.stringify({ success: true }),
+      JSON.stringify({ success: true, patient_id: patientId }),
       { status: 200, headers: { ...headers, 'Content-Type': 'application/json' } },
     );
   } catch (err) {
