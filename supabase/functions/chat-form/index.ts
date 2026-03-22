@@ -58,7 +58,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Update session with form data
-    await supabase.from('chat_sessions').upsert(
+    const { error: sessionError } = await supabase.from('chat_sessions').upsert(
       {
         session_id,
         user_name: form_data.name || '',
@@ -68,9 +68,10 @@ serve(async (req) => {
       },
       { onConflict: 'session_id', ignoreDuplicates: false },
     );
+    if (sessionError) console.error('Session upsert error:', sessionError.message);
 
     // Store form submission as a message
-    await supabase.from('chat_messages').insert({
+    const { error: msgError } = await supabase.from('chat_messages').insert({
       session_id,
       role: 'system',
       content: JSON.stringify({
@@ -86,6 +87,7 @@ serve(async (req) => {
       }),
       message_type: 'form_submission',
     });
+    if (msgError) console.error('Message insert error:', msgError.message);
 
     // ── Normalize area input ─────────────────────────────
     let area = (form_data.area || '').trim();
@@ -167,7 +169,7 @@ serve(async (req) => {
       page_url ? `送信元: ${page_url}` : '',
     ].filter(Boolean).join('\n');
 
-    await supabase.from('patients').insert({
+    const { error: patientError } = await supabase.from('patients').insert({
       id: patientId,
       name_kanji: form_data.name || '',
       name_kana: nameKana,
@@ -186,14 +188,23 @@ serve(async (req) => {
       check_sent: false,
     });
 
+    if (patientError) {
+      console.error('Patient insert error:', patientError.message);
+      return new Response(
+        JSON.stringify({ success: false, error: 'Patient registration failed' }),
+        { status: 500, headers: { ...headers, 'Content-Type': 'application/json' } },
+      );
+    }
+
     // Link patient to chat session
-    await supabase.from('chat_sessions').update({
+    const { error: linkError } = await supabase.from('chat_sessions').update({
       patient_id: patientId,
       converted: true,
     }).eq('session_id', session_id);
+    if (linkError) console.error('Session link error:', linkError.message);
 
     // ── Send email notification via GAS webhook ─────────
-    const GAS_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbxzQ8Q1FFE0-r_wCJ_ApqsgB4sZu2_mpah1ZmjtxIPkm0WJkTBaEgHtN-QpZL5FyBTM/exec';
+    const GAS_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbyRw5LahkEShM7VVEmCLQtduVNKTuBn-KiurNQSQUkgPV-ueUtNCk2_b4wgvuqgB2s9/exec';
     try {
       await fetch(GAS_WEBHOOK_URL, {
         method: 'POST',
