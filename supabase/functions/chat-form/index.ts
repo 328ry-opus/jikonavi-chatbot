@@ -120,6 +120,7 @@ serve(async (req) => {
 
     // ── Predict furigana from kanji name via Gemini ────────
     let nameKana = form_data.name_kana || '';
+    let kanaPredicted = false;
     if (!nameKana && form_data.name) {
       try {
         const apiKey = Deno.env.get('GEMINI_API_KEY');
@@ -140,6 +141,7 @@ serve(async (req) => {
             const predicted = json?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
             if (predicted && /^[\u3040-\u309F\u30A0-\u30FF\s\u3000]+$/.test(predicted)) {
               nameKana = predicted;
+              kanaPredicted = true;
             }
           }
         }
@@ -161,6 +163,7 @@ serve(async (req) => {
       form_data.accident_type ? `事故状況: ${form_data.accident_type}` : '',
       area ? `希望エリア: ${area}` : '',
       form_data.contact_time ? `連絡希望: ${form_data.contact_time}` : '',
+      kanaPredicted ? `ふりがな「${nameKana}」はAI予測です（要確認）` : '',
       page_url ? `送信元: ${page_url}` : '',
     ].filter(Boolean).join('\n');
 
