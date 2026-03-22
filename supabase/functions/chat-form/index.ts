@@ -120,14 +120,19 @@ serve(async (req) => {
       }
     }
 
-    // ── Resolve furigana (name_kana) ───────────────────────
+    // ── Resolve furigana (name_kana) — always katakana ────
     const KANA_RE = /^[ぁ-ゖァ-ヺー 　]+$/u;
     const HAS_KANJI = /\p{Script=Han}/u;
+
+    function toKatakana(s: string): string {
+      return s.replace(/[\u3041-\u3096]/g, c => String.fromCharCode(c.charCodeAt(0) + 0x60));
+    }
 
     function sanitizeKana(v: unknown): string {
       if (typeof v !== 'string') return '';
       const s = v.normalize('NFKC').replace(/[ \t\r\n　]+/g, ' ').trim();
-      return (s && KANA_RE.test(s) && !HAS_KANJI.test(s)) ? s : '';
+      if (!s || !KANA_RE.test(s) || HAS_KANJI.test(s)) return '';
+      return toKatakana(s);
     }
 
     let nameKana = sanitizeKana(form_data.name_kana);
@@ -136,12 +141,12 @@ serve(async (req) => {
     if (!nameKana && form_data.name) {
       const name = form_data.name.trim();
 
-      // If name is already all kana, use it directly
+      // If name is already all kana, convert to katakana
       const directKana = sanitizeKana(name);
       if (directKana) {
         nameKana = directKana;
       } else {
-        // Name contains kanji — predict furigana via Gemini
+        // Name contains kanji/etc — predict furigana via Gemini
         try {
           const apiKey = Deno.env.get('GEMINI_API_KEY');
           if (apiKey) {
@@ -151,7 +156,7 @@ serve(async (req) => {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                  contents: [{ parts: [{ text: `この日本人名のふりがなをひらがなのみで出力してください。他の文字や説明は一切不要です。\n${name}` }] }],
+                  contents: [{ parts: [{ text: `この人名の読みをカタカナのみで出力してください。他の文字や説明は一切不要です。\n${name}` }] }],
                   generationConfig: { temperature: 0, maxOutputTokens: 200, thinkingConfig: { thinkingBudget: 0 } },
                 }),
               },
