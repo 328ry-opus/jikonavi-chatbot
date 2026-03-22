@@ -33,6 +33,7 @@
     currentFormField: null,
     currentFormNext: null,
     currentNodeId: null,
+    nodeHistory: [],
   };
 
   // ── Styles ──────────────────────────────────────────────
@@ -149,6 +150,14 @@
       cursor: pointer; text-align: center; display: flex; align-items: center; justify-content: center; gap: 8px;
     }
     .jn-phone-btn:hover { background: #219a52; }
+
+    /* Back button */
+    .jn-back-btn {
+      background: none; border: none; color: #888; font-size: 12px;
+      cursor: pointer; padding: 4px 16px 0; display: block;
+      font-family: inherit;
+    }
+    .jn-back-btn:hover { color: ${CONFIG.brandColor}; }
 
     /* Input */
     .jn-input-area {
@@ -366,9 +375,14 @@
   }
 
   // ── Scenario logic ──────────────────────────────────────
-  function showScenarioNode(nodeId) {
+  function showScenarioNode(nodeId, skipHistory) {
     const node = state.scenarioData[nodeId];
     if (!node) return;
+
+    // Track history for back navigation
+    if (!skipHistory && nodeId !== 'root') {
+      state.nodeHistory.push(nodeId);
+    }
 
     // Handle submit action
     if (node.action === 'submit_form') {
@@ -384,6 +398,7 @@
       state.currentFormNext = node.next;
       aiBanner.style.display = 'none';
       addMessage(node.message, 'bot');
+      showBackButton();
       setInputPlaceholder(node.input_placeholder || 'ここに入力...');
       inputEl.type = node.input_type === 'tel' ? 'tel' : 'text';
       inputEl.focus();
@@ -400,6 +415,35 @@
     if (node.options) {
       showOptions(node.options, node.phone_number);
     }
+  }
+
+  function showBackButton() {
+    if (state.nodeHistory.length < 2) return;
+    const btn = document.createElement('button');
+    btn.className = 'jn-back-btn';
+    btn.textContent = '← 入力をやり直す';
+    btn.addEventListener('click', () => goBack());
+    optionsContainer.innerHTML = '';
+    optionsContainer.appendChild(btn);
+    scrollToBottom();
+  }
+
+  function goBack() {
+    // Remove current node
+    state.nodeHistory.pop();
+    // Get previous node
+    const prevNodeId = state.nodeHistory.pop();
+    if (!prevNodeId) return;
+    // Remove last bot message and user message from display
+    const msgs = messagesEl.querySelectorAll('.jn-msg');
+    if (msgs.length >= 2) {
+      msgs[msgs.length - 1].remove(); // bot message (current)
+      msgs[msgs.length - 2].remove(); // user answer (previous)
+    }
+    clearOptions();
+    inputEl.type = 'text';
+    inputEl.value = '';
+    showScenarioNode(prevNodeId);
   }
 
   function handleOptionClick(opt) {
@@ -623,6 +667,7 @@
     }
 
     addMessage(CONFIG.greeting, 'bot');
+    state.nodeHistory.push('root');
     showScenarioNode('root');
     // Hide badge after first open
     badge.style.display = 'none';
