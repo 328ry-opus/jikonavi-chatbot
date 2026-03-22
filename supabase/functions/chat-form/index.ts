@@ -120,37 +120,65 @@ serve(async (req) => {
       }
     }
 
-    // ── Predict furigana from kanji name via Gemini ────────
+    // ── Resolve furigana (name_kana) ───────────────────────
     let nameKana = form_data.name_kana || '';
     let kanaPredicted = false;
+    const kanaRegex = /^[\u3040-\u309F\u30A0-\u30FF\u30FC\s\u3000]+$/;
+
     if (!nameKana && form_data.name) {
-      try {
-        const apiKey = Deno.env.get('GEMINI_API_KEY');
-        if (apiKey) {
-          const res = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                contents: [{ parts: [{ text: `この人名のふりがなをひらがなのみで答えてください。余計な説明は不要です。\n${form_data.name}` }] }],
-                generationConfig: { temperature: 0, maxOutputTokens: 50 },
-              }),
-            },
-          );
-          if (res.ok) {
-            const json = await res.json();
-            const predicted = json?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-            if (predicted && /^[\u3040-\u309F\u30A0-\u30FF\s\u3000]+$/.test(predicted)) {
-              nameKana = predicted;
-              kanaPredicted = true;
+      const name = form_data.name.trim();
+
+      // If name is already all kana, use it directly
+      if (kanaRegex.test(name)) {
+        nameKana = name;
+      } else {
+        // Name contains kanji — predict furigana via Gemini
+        try {
+          const apiKey = Deno.env.get('GEMINI_API_KEY');
+          if (apiKey) {
+            const res = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  contents: [{ parts: [{ text: `この人名のふりがなをひらがなのみで答えてください。余計な説明は不要です。\n${name}` }] }],
+                  generationConfig: { temperature: 0, maxOutputTokens: 50 },
+                }),
+              },
+            );
+            if (res.ok) {
+              const json = await res.json();
+              const predicted = json?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+              if (predicted && kanaRegex.test(predicted)) {
+                nameKana = predicted;
+                kanaPredicted = true;
+              }
+            } else {
+              console.error('Gemini API error:', res.status, await res.text());
             }
+          } else {
+            console.error('GEMINI_API_KEY not set for chat-form');
           }
+        } catch (e) {
+          console.error('Furigana prediction failed:', e);
         }
-      } catch (e) {
-        console.error('Furigana prediction failed:', e);
-        // Non-critical, continue without kana
       }
+    }
+
+    // ── Check for duplicate patients ────────────────────
+    let dupNote = '';
+    try {
+      const { data: dups } = await supabase.rpc('find_duplicate_patients', {
+        p_phone: phone || null,
+        p_name_kana: null,
+        p_exclude_id: null,
+      });
+      if (dups && dups.length > 0) {
+        dupNote = `\n【重複の可能性】既存患者: ${dups.map((d: any) => `${d.name_kanji || d.id}(${d.status})`).join(', ')}`;
+      }
+    } catch (e) {
+      console.error('Duplicate check failed:', e);
     }
 
     // ── Create patient record in CRM ──────────────────────
@@ -167,7 +195,7 @@ serve(async (req) => {
       form_data.contact_time ? `連絡希望: ${form_data.contact_time}` : '',
       kanaPredicted ? `ふりがな「${nameKana}」はAI予測です（要確認）` : '',
       page_url ? `送信元: ${page_url}` : '',
-    ].filter(Boolean).join('\n');
+    ].filter(Boolean).join('\n') + dupNote;
 
     const { error: patientError } = await supabase.from('patients').insert({
       id: patientId,
