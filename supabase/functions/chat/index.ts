@@ -438,9 +438,36 @@ serve(async (req) => {
     logMessage(session_id, user_name || '', 'user', sanitizedMessage, 'ai_question');
 
     // Call Gemini with streaming
-    const stream = await callGemini(sanitizedMessage, conversation_history || []);
+    const geminiStream = await callGemini(sanitizedMessage, conversation_history || []);
 
-    return new Response(stream, {
+    // Wrap stream to capture full assistant response for DB logging
+    let fullResponse = '';
+    const reader = geminiStream.getReader();
+    const loggingStream = new ReadableStream({
+      async pull(controller) {
+        const { done, value } = await reader.read();
+        if (done) {
+          controller.close();
+          // Log the complete assistant response to DB
+          if (fullResponse.trim()) {
+            logMessage(session_id, user_name || '', 'assistant', fullResponse.trim(), 'ai_response');
+          }
+          return;
+        }
+        // Capture text chunks for logging
+        const chunk = new TextDecoder().decode(value);
+        for (const line of chunk.split('\n')) {
+          if (!line.startsWith('data: ') || line.includes('[DONE]')) continue;
+          try {
+            const parsed = JSON.parse(line.slice(6));
+            if (parsed?.text) fullResponse += parsed.text;
+          } catch { /* skip */ }
+        }
+        controller.enqueue(value);
+      },
+    });
+
+    return new Response(loggingStream, {
       headers: {
         ...headers,
         'Content-Type': 'text/event-stream',

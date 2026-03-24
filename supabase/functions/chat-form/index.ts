@@ -137,6 +137,7 @@ serve(async (req) => {
 
     let nameKana = sanitizeKana(form_data.name_kana);
     let kanaPredicted = false;
+    let nameKanjiFormatted = '';  // Gemini-formatted kanji name with space between family/given
 
     if (!nameKana && form_data.name) {
       const name = form_data.name.trim();
@@ -146,7 +147,11 @@ serve(async (req) => {
       if (directKana) {
         nameKana = directKana;
       } else {
-        // Name contains kanji/etc — predict furigana via Gemini
+        // If name already has a space, use it as-is for kanji formatting
+        if (/\s/.test(name)) {
+          nameKanjiFormatted = name.replace(/\s+/g, ' ').trim();
+        }
+        // Name contains kanji/etc — predict furigana + split kanji name via Gemini
         try {
           const apiKey = Deno.env.get('GEMINI_API_KEY');
           if (apiKey) {
@@ -156,7 +161,7 @@ serve(async (req) => {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                  contents: [{ parts: [{ text: `この人名の読みをカタカナのみで出力してください。姓と名の間には半角スペースを1つ入れてください。他の文字や説明は一切不要です。\n${name}` }] }],
+                  contents: [{ parts: [{ text: `以下の人名について、2行で回答してください。他の文字や説明は一切不要です。\n1行目: 読みをカタカナのみで出力（姓と名の間に半角スペース1つ）\n2行目: 漢字表記を姓と名の間に半角スペース1つ入れて出力\n${name}` }] }],
                   generationConfig: { temperature: 0, maxOutputTokens: 200, thinkingConfig: { thinkingBudget: 0 } },
                 }),
               },
@@ -164,12 +169,28 @@ serve(async (req) => {
             if (res.ok) {
               const json = await res.json();
               const predicted = json?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-              const cleanKana = sanitizeKana(predicted);
+              const lines = (predicted || '').split('\n').map((l: string) => l.trim()).filter(Boolean);
+
+              // Line 1: furigana
+              const cleanKana = sanitizeKana(lines[0]);
               if (cleanKana) {
                 nameKana = cleanKana;
                 kanaPredicted = true;
               } else {
-                console.error('Gemini returned non-kana:', predicted);
+                console.error('Gemini returned non-kana:', lines[0]);
+              }
+
+              // Line 2: kanji name with space (skip if user already provided space)
+              if (lines[1] && !nameKanjiFormatted) {
+                const kanjiLine = lines[1].trim();
+                // Validate: all original characters (minus spaces) should be present
+                const origChars = name.replace(/\s/g, '');
+                const geminiChars = kanjiLine.replace(/\s/g, '');
+                if (geminiChars === origChars && kanjiLine.includes(' ')) {
+                  nameKanjiFormatted = kanjiLine;
+                } else {
+                  console.error('Gemini kanji mismatch:', { original: name, gemini: kanjiLine });
+                }
               }
             } else {
               console.error('Gemini API error:', res.status, await res.text());
@@ -216,7 +237,7 @@ serve(async (req) => {
 
     const { error: patientError } = await supabase.from('patients').insert({
       id: patientId,
-      name_kanji: form_data.name || '',
+      name_kanji: nameKanjiFormatted || form_data.name || '',
       name_kana: nameKana,
       phone,
       address: area,
