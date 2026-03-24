@@ -1,20 +1,17 @@
 /**
  * Notify Overdue — Supabase Edge Function
  * Runs daily at 8:00 JST (23:00 UTC) via Supabase Cron.
- * Checks for patients with overdue NEXT dates and sends notifications.
+ * Checks for patients with overdue NEXT dates and sends a single batch email.
  *
  * Rules:
- * - 1 day overdue → notify assigned staff
- * - 2+ days overdue → escalate to manager (松本社長)
- *
- * Notification channels: GAS Webhook (email) for now.
- * LINE/Chatwork can be added later.
+ * - 1 day overdue → overdue_reminder
+ * - 2+ days overdue → escalation
+ * - All patients sent in ONE GAS webhook call to avoid timeout
  */
 import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 serve(async (req) => {
-  // Allow manual trigger via POST or Cron trigger
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -47,81 +44,89 @@ serve(async (req) => {
       });
     }
 
-    // Calculate overdue days for each patient
+    // Batch idempotency check: get all already-notified patient_ids for today
+    const { data: alreadyNotified } = await supabase
+      .from('notification_log')
+      .select('patient_id, notification_type')
+      .eq('notified_date', todayStr);
+    const notifiedSet = new Set((alreadyNotified || []).map(n => `${n.patient_id}:${n.notification_type}`));
+
+    // Build lists of patients to notify
+    const reminders: any[] = [];
+    const escalations: any[] = [];
+    const logEntries: any[] = [];
     const results = { notified: 0, escalated: 0, skipped: 0 };
 
     for (const patient of overduePatients) {
       const nextDate = new Date(patient.next_date + 'T00:00:00+09:00');
       const diffMs = jstNow.getTime() - nextDate.getTime();
       const overdueDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
       if (overdueDays < 1) continue;
 
       const notificationType = overdueDays >= 2 ? 'escalation' : 'overdue_reminder';
-
-      // Check idempotency: skip if already notified today for same type
-      const { data: existing } = await supabase
-        .from('notification_log')
-        .select('id')
-        .eq('patient_id', patient.id)
-        .eq('notification_type', notificationType)
-        .eq('notified_date', todayStr)
-        .maybeSingle();
-
-      if (existing) {
+      const key = `${patient.id}:${notificationType}`;
+      if (notifiedSet.has(key)) {
         results.skipped++;
         continue;
       }
 
-      // Build notification content
       const patientName = patient.name_kanji || patient.name_kana || patient.id;
       const staffName = patient.staff || '未担当';
-      const content = overdueDays >= 2
-        ? `【エスカレーション】${patientName}（${patient.status}）が${overdueDays}日超過しています。担当: ${staffName}`
-        : `【フォロー超過】${patientName}（${patient.status}）が${overdueDays}日超過しています。担当: ${staffName}`;
+      const entry = { patient_name: patientName, patient_id: patient.id, status: patient.status, staff: staffName, overdue_days: overdueDays, next_date: patient.next_date };
 
-      // Send notification via GAS webhook (email)
-      const GAS_WEBHOOK_URL = Deno.env.get('NOTIFY_GAS_WEBHOOK_URL');
-      let success = true;
-      if (GAS_WEBHOOK_URL) {
-        try {
-          const resp = await fetch(GAS_WEBHOOK_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json; charset=utf-8' },
-            redirect: 'follow',
-            body: JSON.stringify({
-              type: notificationType,
-              patient_name: patientName,
-              patient_id: patient.id,
-              status: patient.status,
-              staff: staffName,
-              overdue_days: overdueDays,
-              next_date: patient.next_date,
-              message: content,
-            }),
-          });
-          success = resp.ok;
-        } catch (e) {
-          console.error('Notification send failed:', e);
-          success = false;
-        }
+      if (notificationType === 'escalation') {
+        escalations.push(entry);
+        results.escalated++;
+      } else {
+        reminders.push(entry);
+        results.notified++;
       }
 
-      // Log notification
-      await supabase.from('notification_log').insert({
+      logEntries.push({
         patient_id: patient.id,
         notification_type: notificationType,
         channel: 'email',
-        content,
-        success,
+        content: `${notificationType === 'escalation' ? '【エスカレーション】' : '【フォロー超過】'}${patientName}（${patient.status}）${overdueDays}日超過 担当:${staffName}`,
+        success: true,
         notified_date: todayStr,
       });
+    }
 
-      if (overdueDays >= 2) {
-        results.escalated++;
-      } else {
-        results.notified++;
+    // Nothing new to notify
+    if (reminders.length === 0 && escalations.length === 0) {
+      return new Response(JSON.stringify({ message: 'All already notified today', ...results }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Send ONE batch webhook to GAS
+    const GAS_WEBHOOK_URL = Deno.env.get('NOTIFY_GAS_WEBHOOK_URL');
+    let success = true;
+    if (GAS_WEBHOOK_URL) {
+      try {
+        const resp = await fetch(GAS_WEBHOOK_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+          redirect: 'follow',
+          body: JSON.stringify({
+            type: 'batch_overdue',
+            date: todayStr,
+            reminders,
+            escalations,
+            total: reminders.length + escalations.length,
+          }),
+        });
+        success = resp.ok;
+      } catch (e) {
+        console.error('Notification send failed:', e);
+        success = false;
       }
+    }
+
+    // Batch insert logs
+    if (logEntries.length > 0) {
+      if (!success) logEntries.forEach(e => e.success = false);
+      await supabase.from('notification_log').insert(logEntries);
     }
 
     return new Response(
@@ -129,6 +134,7 @@ serve(async (req) => {
         message: 'Notification check completed',
         total_overdue: overduePatients.length,
         ...results,
+        email_sent: success,
       }),
       { headers: { 'Content-Type': 'application/json' } },
     );
