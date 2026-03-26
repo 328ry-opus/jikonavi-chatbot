@@ -46,16 +46,35 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // ── Dedup check ──
+    // ── Dedup check (only skip terminal success states) ──
     const { data: existing } = await supabase
       .from("phone_service_log")
-      .select("id")
+      .select("id, status")
       .eq("message_id", message_id)
       .maybeSingle();
 
-    if (existing) {
+    if (existing && existing.status !== "parse_error") {
       return new Response(
         JSON.stringify({ success: true, skipped: true, reason: "already_processed" }),
+        { status: 200, headers },
+      );
+    }
+    // If parse_error, delete old entry to allow reprocessing
+    if (existing && existing.status === "parse_error") {
+      await supabase.from("phone_service_log").delete().eq("id", existing.id);
+    }
+
+    // ── Claim message_id early to prevent race conditions ──
+    const { error: claimError } = await supabase.from("phone_service_log").upsert({
+      message_id,
+      status: "processing",
+      raw_body: email_body,
+      processed_at: new Date().toISOString(),
+    }, { onConflict: "message_id" });
+    if (claimError) {
+      // Another instance already claimed this message
+      return new Response(
+        JSON.stringify({ success: true, skipped: true, reason: "claimed_by_other" }),
         { status: 200, headers },
       );
     }
@@ -133,6 +152,14 @@ ${email_body}
         JSON.stringify({ success: true, type: "existing_inquiry", notified: true }),
         { status: 200, headers },
       );
+    }
+
+    // ── Reject unknown types (Gemini returned unexpected value) ──
+    if (parsed.type !== "new_patient") {
+      console.error("Unknown parse type:", parsed.type);
+      await logEntry(supabase, message_id, null, "parse_error", email_body, parsed, `Unknown type: ${parsed.type}`);
+      await notifyStaff("parse_error", null, email_body);
+      return new Response(JSON.stringify({ success: false, error: "Unknown type" }), { status: 500, headers });
     }
 
     // ── new_patient: normalize + register ──
@@ -224,20 +251,21 @@ ${email_body}
   }
 });
 
-// ── Helper: log to phone_service_log ──
+// ── Helper: log to phone_service_log (upsert to update claimed row) ──
 async function logEntry(
   supabase: any, messageId: string, patientId: string | null,
   status: string, rawBody: string, parsedData: any, errorMessage: string | null,
 ) {
   try {
-    await supabase.from("phone_service_log").insert({
+    await supabase.from("phone_service_log").upsert({
       message_id: messageId,
       patient_id: patientId,
       status,
       raw_body: rawBody,
       parsed_data: parsedData,
       error_message: errorMessage,
-    });
+      processed_at: new Date().toISOString(),
+    }, { onConflict: "message_id" });
   } catch (e) {
     console.error("Log entry failed:", e);
   }

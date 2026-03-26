@@ -71,7 +71,7 @@ serve(async (req) => {
 
       console.log(`LINE message from ${userId}: ${text.substring(0, 100)}`);
 
-      // ── Check if this user already has a recent patient record ──
+      // ── Atomic upsert: claim or get existing log for this user ──
       const { data: existing } = await supabase
         .from("line_message_log")
         .select("id, patient_id, status, messages")
@@ -88,6 +88,12 @@ serve(async (req) => {
         continue;
       }
 
+      if (existing?.status === "registering") {
+        // Another instance is currently processing — skip to avoid duplicates
+        console.log(`User ${userId} is being registered by another instance, skipping`);
+        continue;
+      }
+
       if (existing?.status === "collecting") {
         // Accumulating messages — add this one and re-evaluate
         const messages = [...(existing.messages || []), { text, timestamp, role: "user" }];
@@ -98,17 +104,30 @@ serve(async (req) => {
           const allText = messages.filter((m: any) => m.role === "user").map((m: any) => m.text).join("\n");
           const result = await tryExtractPatientInfo(apiKey, allText);
 
-          if (result && result.has_enough_info) {
-            const patientId = await registerPatient(supabase, apiKey, result, userId);
-            if (patientId) {
-              await supabase.from("line_message_log").update({
-                status: "registered",
-                patient_id: patientId,
-                parsed_data: result,
-                updated_at: new Date().toISOString(),
-              }).eq("id", existing.id);
-              console.log(`Registered patient ${patientId} from LINE user ${userId}`);
-              await notifyStaff(result, patientId);
+          if (result && result.has_enough_info === true && result.patient_name && result.phone) {
+            // Claim: set status to 'registering' atomically
+            const { data: claimed } = await supabase.from("line_message_log")
+              .update({ status: "registering", updated_at: new Date().toISOString() })
+              .eq("id", existing.id)
+              .eq("status", "collecting")
+              .select("id")
+              .maybeSingle();
+
+            if (claimed) {
+              const patientId = await registerPatient(supabase, apiKey, result, userId);
+              if (patientId) {
+                await supabase.from("line_message_log").update({
+                  status: "registered",
+                  patient_id: patientId,
+                  parsed_data: result,
+                  updated_at: new Date().toISOString(),
+                }).eq("id", existing.id);
+                console.log(`Registered patient ${patientId} from LINE user ${userId}`);
+                await notifyStaff(result, patientId);
+              } else {
+                // Registration failed — revert to collecting
+                await supabase.from("line_message_log").update({ status: "collecting", updated_at: new Date().toISOString() }).eq("id", existing.id);
+              }
             }
           }
         }
@@ -117,30 +136,47 @@ serve(async (req) => {
 
       // ── New user — create log entry and evaluate first message ──
       const messages = [{ text, timestamp, role: "user" }];
-      let status = "collecting";
+      let logStatus = "collecting";
       let patientId = null;
       let parsedData = null;
 
-      if (apiKey) {
+      // Insert log entry first (claim this user)
+      const { data: newLog } = await supabase.from("line_message_log").insert({
+        line_user_id: userId,
+        status: "collecting",
+        messages,
+      }).select("id").single();
+
+      if (apiKey && newLog) {
         const result = await tryExtractPatientInfo(apiKey, text);
-        if (result && result.has_enough_info) {
-          patientId = await registerPatient(supabase, apiKey, result, userId);
-          if (patientId) {
-            status = "registered";
-            parsedData = result;
-            console.log(`Registered patient ${patientId} from first LINE message`);
-            await notifyStaff(result, patientId);
+        if (result && result.has_enough_info === true && result.patient_name && result.phone) {
+          // Claim for registration
+          const { data: claimed } = await supabase.from("line_message_log")
+            .update({ status: "registering" })
+            .eq("id", newLog.id)
+            .eq("status", "collecting")
+            .select("id")
+            .maybeSingle();
+
+          if (claimed) {
+            patientId = await registerPatient(supabase, apiKey, result, userId);
+            if (patientId) {
+              logStatus = "registered";
+              parsedData = result;
+              console.log(`Registered patient ${patientId} from first LINE message`);
+              await notifyStaff(result, patientId);
+            } else {
+              logStatus = "collecting";
+            }
+            await supabase.from("line_message_log").update({
+              status: logStatus,
+              patient_id: patientId,
+              parsed_data: parsedData,
+              updated_at: new Date().toISOString(),
+            }).eq("id", newLog.id);
           }
         }
       }
-
-      await supabase.from("line_message_log").insert({
-        line_user_id: userId,
-        status,
-        patient_id: patientId,
-        messages,
-        parsed_data: parsedData,
-      });
     }
 
     return new Response(JSON.stringify({ success: true }), { status: 200, headers });
