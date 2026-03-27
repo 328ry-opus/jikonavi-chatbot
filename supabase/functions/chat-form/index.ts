@@ -221,8 +221,9 @@ serve(async (req) => {
 
     // ── Create patient record in CRM ──────────────────────
     const now = new Date();
-    const todayStr = now.toISOString().slice(0, 10);
-    const timeStr = now.toTimeString().slice(0, 5);
+    const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+    const todayStr = jst.toISOString().slice(0, 10);
+    const timeStr = jst.toISOString().slice(11, 16);
     const patientId = 'p' + Date.now();
 
     const notes = [
