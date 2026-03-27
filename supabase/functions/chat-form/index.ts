@@ -270,7 +270,7 @@ serve(async (req) => {
     if (linkError) console.error('Session link error:', linkError.message);
 
     // ── Send email notification via GAS webhook ─────────
-    const GAS_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbw1vC6_gkCdSSRzKcI1hQHL6fqRrjDRxh4KuQFMFBF-0TSIDlN-OR9nC74ogGVVPhMi/exec';
+    const GAS_WEBHOOK_URL = Deno.env.get("GAS_NOTIFY_WEBHOOK_URL");
     try {
       const gasRes = await fetch(GAS_WEBHOOK_URL, {
         method: 'POST',
