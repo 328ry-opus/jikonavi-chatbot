@@ -39,7 +39,7 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { session_id, form_data, page_url } = body;
+    const { session_id, form_data, variant, page_url } = body;
 
     if (!session_id || !form_data) {
       return new Response(
@@ -263,10 +263,11 @@ serve(async (req) => {
       );
     }
 
-    // Link patient to chat session
+    // Link patient to chat session (include A/B variant)
     const { error: linkError } = await supabase.from('chat_sessions').update({
       patient_id: patientId,
       converted: true,
+      variant: variant || 'a',
     }).eq('session_id', session_id);
     if (linkError) console.error('Session link error:', linkError.message);
 
@@ -278,6 +279,7 @@ serve(async (req) => {
         headers: { 'Content-Type': 'application/json; charset=utf-8', 'Accept': 'application/json' },
         redirect: 'follow',
         body: JSON.stringify({
+          source: 'chatbot',
           name: form_data.name || '',
           phone,
           area,

@@ -9,6 +9,7 @@
   // ── Config ──────────────────────────────────────────────
   const CONFIG = {
     edgeFunctionUrl: 'https://dxbdqldfqlggsrpcjuwg.supabase.co/functions/v1/chat',
+    trackUrl: 'https://dxbdqldfqlggsrpcjuwg.supabase.co/functions/v1/chat-track',
     brandColor: '#1a5995',
     accentColor: '#027c96',
     widgetWidth: 380,
@@ -25,6 +26,7 @@
     scenarioData: null,
     messages: [],
     sessionId: crypto.randomUUID(),
+    abVariant: 'a',
     userName: '',
     conversationHistory: [],
     isLoading: false,
@@ -340,6 +342,7 @@
         btn.className = 'jn-phone-btn';
         btn.href = `tel:${phoneNumber}`;
         btn.innerHTML = `${ICON_PHONE} ${opt.label}`;
+        btn.addEventListener('click', () => trackEvent('phone_tap', state.currentNodeId));
         wrapper.appendChild(btn);
       } else {
         const btn = document.createElement('button');
@@ -374,10 +377,31 @@
     inputEl.disabled = loading;
   }
 
+  // ── Event tracking ────────────────────────────────────────
+  function trackEvent(event, node, metadata) {
+    try {
+      const payload = JSON.stringify({
+        session_id: state.sessionId,
+        event,
+        node: node || state.currentNodeId || null,
+        variant: state.abVariant,
+        metadata: metadata || null,
+      });
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon(CONFIG.trackUrl, payload);
+      } else {
+        fetch(CONFIG.trackUrl, { method: 'POST', body: payload, keepalive: true }).catch(() => {});
+      }
+    } catch (e) { /* tracking should never break the widget */ }
+  }
+
   // ── Scenario logic ──────────────────────────────────────
   function showScenarioNode(nodeId, skipHistory) {
     const node = state.scenarioData[nodeId];
     if (!node) return;
+
+    // Track navigation event
+    trackEvent('navigate', nodeId);
 
     // Track history for back navigation
     if (!skipHistory && nodeId !== 'root') {
@@ -462,6 +486,7 @@
     }
 
     if (opt.action === 'switch_to_ai') {
+      trackEvent('ai_switch', state.currentNodeId);
       switchToAiMode();
     } else if (opt.next) {
       showScenarioNode(opt.next);
@@ -614,6 +639,7 @@
   // ── Form submission ────────────────────────────────────
   async function submitForm() {
     setLoadingState(true);
+    trackEvent('submit', 'confirm');
     try {
       const response = await fetch(CONFIG.edgeFunctionUrl.replace('/chat', '/chat-form'), {
         method: 'POST',
@@ -621,6 +647,7 @@
         body: JSON.stringify({
           session_id: state.sessionId,
           form_data: state.formData,
+          variant: state.abVariant,
           page_url: window.location.href,
         }),
       });
@@ -655,6 +682,8 @@
 
     if (state.isOpen && state.messages.length === 0) {
       initChat();
+    } else if (!state.isOpen && state.messages.length > 0) {
+      trackEvent('close', state.currentNodeId);
     }
   }
 
@@ -663,16 +692,40 @@
 
   // ── Init ────────────────────────────────────────────────
   async function initChat() {
-    // Load scenario data
+    // A/B test variant assignment
     try {
-      const scriptSrc = document.querySelector('#jikonavi-chat-widget')
-        ? '' : (document.currentScript?.src || '');
-      const baseUrl = scriptSrc ? scriptSrc.replace(/widget\.js.*$/, '') : './';
-      const res = await fetch(baseUrl + 'scenario.json');
-      state.scenarioData = await res.json();
+      let variant = localStorage.getItem('jikonavi_ab_variant');
+      if (!variant) {
+        variant = Math.random() < 0.5 ? 'a' : 'b';
+        localStorage.setItem('jikonavi_ab_variant', variant);
+      }
+      state.abVariant = variant;
+    } catch (e) {
+      state.abVariant = 'a'; // localStorage blocked (e.g. incognito)
+    }
+
+    // Load scenario data (use variant-specific file if available)
+    const scriptSrc = document.querySelector('#jikonavi-chat-widget')
+      ? '' : (document.currentScript?.src || '');
+    const baseUrl = scriptSrc ? scriptSrc.replace(/widget\.js.*$/, '') : './';
+
+    try {
+      // Try variant-specific scenario first (for A/B testing)
+      if (state.abVariant !== 'a') {
+        const variantRes = await fetch(baseUrl + `scenario_${state.abVariant}.json`);
+        if (variantRes.ok) {
+          state.scenarioData = await variantRes.json();
+        } else {
+          // Variant file not found — fall back to default
+          const res = await fetch(baseUrl + 'scenario.json');
+          state.scenarioData = await res.json();
+        }
+      } else {
+        const res = await fetch(baseUrl + 'scenario.json');
+        state.scenarioData = await res.json();
+      }
     } catch (e) {
       console.error('Jikonavi: scenario.json load failed', e);
-      // Fallback: inline minimal scenario
       state.scenarioData = {
         root: {
           message: 'どのようなご相談ですか？',
@@ -682,6 +735,9 @@
         },
       };
     }
+
+    // Track chat open
+    trackEvent('open', null);
 
     addMessage(CONFIG.greeting, 'bot');
     state.nodeHistory.push('root');
