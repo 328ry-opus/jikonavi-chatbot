@@ -13,14 +13,13 @@
     "form_type": "multi_field",
     "fields": [
       {
-        "field": "accident_situation",
-        "label": "事故の状況",
+        "field": "accident_type",
+        "label": "お客様の立場",
         "type": "radio",
         "required": true,
         "options": [
-          { "label": "追突された（被害者）", "value": "追突（被害者）" },
-          { "label": "出合い頭にぶつかった", "value": "出合い頭" },
-          { "label": "自分がぶつけてしまった（加害者）", "value": "加害者" },
+          { "label": "事故の被害者", "value": "被害者" },
+          { "label": "事故の加害者", "value": "加害者" },
           { "label": "わからない", "value": "不明" }
         ]
       },
@@ -29,34 +28,34 @@
         "label": "事故にあった日",
         "type": "date",
         "required": true
+      },
+      {
+        "field": "other_notes",
+        "label": "その他のご相談事項（任意）",
+        "type": "text",
+        "required": false,
+        "placeholder": "気になることがあればご記入ください"
       }
     ],
-    "next": "step2_symptoms"
+    "next": "step2_details"
   },
-  "step2_symptoms": {
-    "message": "症状と通院希望エリアを教えてください。【ステップ2/3】",
+  "step2_details": {
+    "message": "事故の詳しいご状況を教えてください。【ステップ2/3】",
     "form_type": "multi_field",
     "fields": [
       {
-        "field": "symptoms",
-        "label": "症状を選んでください（複数選択OK）",
-        "type": "checkbox",
+        "field": "accident_situation",
+        "label": "事故の状況",
+        "type": "textarea",
         "required": true,
-        "options": [
-          { "label": "首・肩が痛い", "value": "首・肩" },
-          { "label": "腰・背中が痛い", "value": "腰・背中" },
-          { "label": "頭痛・めまい", "value": "頭痛・めまい" },
-          { "label": "手足のしびれ", "value": "手足" },
-          { "label": "まだ症状が出ていない", "value": "症状なし" },
-          { "label": "その他", "value": "その他" }
-        ]
+        "placeholder": "（例）信号無視の車に衝突された"
       },
       {
-        "field": "area",
-        "label": "通院希望エリア",
-        "type": "text",
+        "field": "injury_status",
+        "label": "けがの状況",
+        "type": "textarea",
         "required": true,
-        "placeholder": "例：名古屋駅、船橋市など"
+        "placeholder": "（例）首が痛い、腰に違和感がある"
       }
     ],
     "next": "step3_contact"
@@ -82,14 +81,16 @@
       {
         "field": "contact_time",
         "label": "ご希望の連絡時間帯",
-        "type": "radio",
+        "type": "text",
         "required": true,
-        "options": [
-          { "label": "午前（9:00〜12:00）", "value": "午前" },
-          { "label": "午後（12:00〜17:00）", "value": "午後" },
-          { "label": "夕方以降（17:00〜）", "value": "夕方以降" },
-          { "label": "いつでもOK", "value": "いつでもOK" }
-        ]
+        "placeholder": "例：平日14時以降"
+      },
+      {
+        "field": "area",
+        "label": "通院希望エリア",
+        "type": "text",
+        "required": true,
+        "placeholder": "例：東京都 杉並区 高円寺南"
       }
     ],
     "next": "confirm"

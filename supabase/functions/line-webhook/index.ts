@@ -256,8 +256,9 @@ async function registerPatient(supabase: any, apiKey: string, info: any, lineUse
   // Parse dates
   const accidentDate = parseDate(info.accident_date);
   const now = new Date();
-  const todayStr = now.toISOString().slice(0, 10);
-  const timeStr = now.toTimeString().slice(0, 5);
+  const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  const todayStr = jst.toISOString().slice(0, 10);
+  const timeStr = jst.toISOString().slice(11, 16);
 
   // Duplicate check
   let dupNote = "";
@@ -328,6 +329,7 @@ async function notifyStaff(info: any, patientId: string) {
         name: info.patient_name || "",
         phone: info.phone || "",
         area: info.preferred_area || "",
+        accident_date: info.accident_date || "",
         accident_detail: info.accident_detail || "",
         patient_id: patientId,
       }),
@@ -410,15 +412,34 @@ async function resolveNameKana(apiKey: string, name: string): Promise<{ nameKana
   }
 }
 
-// ── Helper: parse date "3/25" → "YYYY-MM-DD" ──
+// ── Helper: parse date "3/25", "3月25日", "2026-03-25" etc → "YYYY-MM-DD" ──
 function parseDate(raw: string | undefined): string | null {
   if (!raw || raw.trim() === "") return null;
-  const now = new Date();
-  const m = raw.match(/(?:(\d{4})\/)??(\d{1,2})\/(\d{1,2})/);
-  if (!m) return null;
-  let year = m[1] ? parseInt(m[1]) : now.getFullYear();
-  const month = parseInt(m[2]);
-  const day = parseInt(m[3]);
-  if (!m[1] && month === 12 && now.getMonth() === 0) year = now.getFullYear() - 1;
-  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  const jst = new Date(Date.now() + 9 * 60 * 60 * 1000);
+
+  // "2026-03-25" ISO format
+  const iso = raw.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (iso) return `${iso[1]}-${String(parseInt(iso[2])).padStart(2, "0")}-${String(parseInt(iso[3])).padStart(2, "0")}`;
+
+  // "3/25" or "2026/3/25"
+  const slash = raw.match(/(?:(\d{4})\/)??(\d{1,2})\/(\d{1,2})/);
+  if (slash) {
+    let year = slash[1] ? parseInt(slash[1]) : jst.getUTCFullYear();
+    const month = parseInt(slash[2]);
+    const day = parseInt(slash[3]);
+    if (!slash[1] && month === 12 && jst.getUTCMonth() === 0) year = jst.getUTCFullYear() - 1;
+    return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+
+  // "3月25日" or "2026年3月25日"
+  const jp = raw.match(/(?:(\d{4})年)?(\d{1,2})月(\d{1,2})日/);
+  if (jp) {
+    let year = jp[1] ? parseInt(jp[1]) : jst.getUTCFullYear();
+    const month = parseInt(jp[2]);
+    const day = parseInt(jp[3]);
+    if (!jp[1] && month === 12 && jst.getUTCMonth() === 0) year = jst.getUTCFullYear() - 1;
+    return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+
+  return null;
 }

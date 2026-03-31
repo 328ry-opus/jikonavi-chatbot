@@ -226,6 +226,51 @@
       .jn-input { font-size: 16px; }
     }
 
+    /* Multi-field form */
+    .jn-form { padding: 8px 16px 12px; animation: jn-fadeIn 0.3s ease; }
+    .jn-form-group { margin-bottom: 14px; }
+    .jn-form-label {
+      font-size: 12px; font-weight: 700; color: #555; margin-bottom: 6px; display: block;
+    }
+    .jn-form-label .jn-required { color: #e74c3c; margin-left: 2px; }
+
+    .jn-radio-group, .jn-checkbox-group {
+      display: flex; flex-wrap: wrap; gap: 6px;
+    }
+    .jn-radio-btn, .jn-checkbox-btn {
+      background: #fff; border: 1.5px solid #ddd; color: #555;
+      padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 500;
+      cursor: pointer; transition: all 0.15s; user-select: none;
+      font-family: inherit;
+    }
+    .jn-radio-btn:hover, .jn-checkbox-btn:hover { border-color: ${CONFIG.brandColor}; color: ${CONFIG.brandColor}; }
+    .jn-radio-btn.selected {
+      background: ${CONFIG.brandColor}; border-color: ${CONFIG.brandColor}; color: #fff;
+    }
+    .jn-checkbox-btn.selected {
+      background: ${CONFIG.accentColor}; border-color: ${CONFIG.accentColor}; color: #fff;
+    }
+
+    .jn-form-input {
+      width: 100%; border: 1.5px solid #ddd; border-radius: 8px; padding: 8px 12px;
+      font-size: 13px; font-family: inherit; outline: none; box-sizing: border-box;
+    }
+    .jn-form-input:focus { border-color: ${CONFIG.brandColor}; }
+    .jn-form-input::placeholder { color: #aaa; }
+
+    .jn-form-submit {
+      width: 100%; padding: 12px; border: none; border-radius: 10px;
+      background: ${CONFIG.brandColor}; color: #fff;
+      font-size: 14px; font-weight: 700; cursor: pointer;
+      font-family: inherit; transition: background 0.15s; margin-top: 4px;
+    }
+    .jn-form-submit:hover { background: ${CONFIG.accentColor}; }
+    .jn-form-submit:disabled { background: #ccc; cursor: not-allowed; }
+
+    .jn-form-error {
+      font-size: 11px; color: #e74c3c; margin-top: 4px; display: none;
+    }
+
     @keyframes jn-fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
     @keyframes jn-bounce {
       0%, 60%, 100% { transform: translateY(0); }
@@ -415,6 +460,19 @@
       return;
     }
 
+    // Handle multi-field form nodes
+    if (node.form_type === 'multi_field') {
+      state.mode = 'form_input';
+      state.currentNodeId = nodeId;
+      aiBanner.style.display = 'none';
+      addMessage(node.message, 'bot');
+      showBackButton();
+      setInputPlaceholder('フォームに入力してください');
+      inputEl.disabled = true;
+      renderMultiFieldForm(node);
+      return;
+    }
+
     // Handle form input nodes (text/tel)
     if (node.input_type) {
       state.mode = 'form_input';
@@ -439,6 +497,190 @@
     if (node.options) {
       showOptions(node.options, node.phone_number);
     }
+  }
+
+  function renderMultiFieldForm(node) {
+    optionsContainer.innerHTML = '';
+    const form = document.createElement('div');
+    form.className = 'jn-form';
+    const formState = {};
+
+    node.fields.forEach(field => {
+      const group = document.createElement('div');
+      group.className = 'jn-form-group';
+
+      // Label
+      const label = document.createElement('label');
+      label.className = 'jn-form-label';
+      label.textContent = field.label;
+      if (field.required) {
+        const req = document.createElement('span');
+        req.className = 'jn-required';
+        req.textContent = '*';
+        label.appendChild(req);
+      }
+      group.appendChild(label);
+
+      if (field.type === 'radio') {
+        const radioGroup = document.createElement('div');
+        radioGroup.className = 'jn-radio-group';
+        formState[field.field] = null;
+        field.options.forEach(opt => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'jn-radio-btn';
+          btn.textContent = opt.label;
+          btn.addEventListener('click', () => {
+            radioGroup.querySelectorAll('.jn-radio-btn').forEach(b => b.classList.remove('selected'));
+            btn.classList.add('selected');
+            formState[field.field] = opt.value;
+          });
+          radioGroup.appendChild(btn);
+        });
+        group.appendChild(radioGroup);
+
+      } else if (field.type === 'checkbox') {
+        const cbGroup = document.createElement('div');
+        cbGroup.className = 'jn-checkbox-group';
+        formState[field.field] = [];
+        field.options.forEach(opt => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'jn-checkbox-btn';
+          btn.textContent = opt.label;
+          btn.addEventListener('click', () => {
+            btn.classList.toggle('selected');
+            if (btn.classList.contains('selected')) {
+              formState[field.field].push(opt.value);
+            } else {
+              formState[field.field] = formState[field.field].filter(v => v !== opt.value);
+            }
+          });
+          cbGroup.appendChild(btn);
+        });
+        group.appendChild(cbGroup);
+
+      } else if (field.type === 'date') {
+        const input = document.createElement('input');
+        input.type = 'date';
+        input.className = 'jn-form-input';
+        input.required = !!field.required;
+        // Default to today
+        input.value = new Date().toISOString().split('T')[0];
+        formState[field.field] = input.value;
+        input.addEventListener('change', () => { formState[field.field] = input.value; });
+        group.appendChild(input);
+
+      } else if (field.type === 'textarea') {
+        const textarea = document.createElement('textarea');
+        textarea.className = 'jn-form-input';
+        textarea.placeholder = field.placeholder || '';
+        textarea.required = !!field.required;
+        textarea.rows = 2;
+        textarea.style.resize = 'vertical';
+        formState[field.field] = '';
+        textarea.addEventListener('input', () => { formState[field.field] = textarea.value; });
+        group.appendChild(textarea);
+
+      } else if (field.type === 'text' || field.type === 'tel') {
+        const input = document.createElement('input');
+        input.type = field.type === 'tel' ? 'tel' : 'text';
+        input.className = 'jn-form-input';
+        input.placeholder = field.placeholder || '';
+        input.required = !!field.required;
+        formState[field.field] = '';
+        input.addEventListener('input', () => { formState[field.field] = input.value; });
+        group.appendChild(input);
+      }
+
+      // Error message
+      const error = document.createElement('div');
+      error.className = 'jn-form-error';
+      error.dataset.field = field.field;
+      group.appendChild(error);
+
+      form.appendChild(group);
+    });
+
+    // Submit button
+    const submitBtn = document.createElement('button');
+    submitBtn.type = 'button';
+    submitBtn.className = 'jn-form-submit';
+    submitBtn.textContent = node.next === 'confirm' ? '送信する' : '次へ';
+    submitBtn.addEventListener('click', () => {
+      // Validate
+      let valid = true;
+      node.fields.forEach(field => {
+        const errorEl = form.querySelector(`[data-field="${field.field}"]`);
+        if (!field.required) { errorEl.style.display = 'none'; return; }
+
+        const val = formState[field.field];
+        let isEmpty = false;
+        if (Array.isArray(val)) {
+          isEmpty = val.length === 0;
+        } else {
+          isEmpty = !val || (typeof val === 'string' && !val.trim());
+        }
+
+        if (isEmpty) {
+          errorEl.textContent = `${field.label}を入力してください`;
+          errorEl.style.display = 'block';
+          valid = false;
+        } else {
+          errorEl.style.display = 'none';
+        }
+
+        // Phone validation
+        if (field.field === 'phone' && val) {
+          const digits = val.replace(/[\s\-\u2010-\u2015\u2212\uFF0D]/g, '').replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+          if (!/^0\d{9,10}$/.test(digits)) {
+            errorEl.textContent = '電話番号の形式が正しくありません';
+            errorEl.style.display = 'block';
+            valid = false;
+          }
+        }
+
+        // Name validation
+        if (field.field === 'name' && val) {
+          if (val.trim().length < 2) {
+            errorEl.textContent = 'お名前を正しく入力してください';
+            errorEl.style.display = 'block';
+            valid = false;
+          }
+        }
+      });
+
+      if (!valid) return;
+
+      // Save form data
+      Object.entries(formState).forEach(([key, val]) => {
+        if (Array.isArray(val)) {
+          state.formData[key] = val.join('、');
+        } else {
+          state.formData[key] = val;
+        }
+        if (key === 'name' && val) state.userName = val;
+      });
+
+      // Show user summary
+      const summary = node.fields
+        .map(f => {
+          const v = Array.isArray(formState[f.field]) ? formState[f.field].join('、') : formState[f.field];
+          return v ? `${f.label}: ${v}` : null;
+        })
+        .filter(Boolean)
+        .join('\n');
+      addMessage(summary, 'user');
+
+      // Re-enable input and proceed
+      inputEl.disabled = false;
+      clearOptions();
+      showScenarioNode(node.next);
+    });
+    form.appendChild(submitBtn);
+
+    optionsContainer.appendChild(form);
+    scrollToBottom();
   }
 
   function showBackButton() {
@@ -466,6 +708,7 @@
     clearOptions();
     inputEl.type = 'text';
     inputEl.value = '';
+    inputEl.disabled = false;
     showScenarioNode(prevNodeId);
   }
 
