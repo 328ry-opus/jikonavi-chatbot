@@ -948,8 +948,10 @@
     }
 
     // Load scenario data (use variant-specific file if available)
-    const scriptSrc = document.querySelector('#jikonavi-chat-widget')
-      ? '' : (document.currentScript?.src || '');
+    // Find widget script by src to reliably get base URL (currentScript may be null with defer)
+    const scriptEl = document.currentScript
+      || document.querySelector('script[src*="widget.js"]');
+    const scriptSrc = scriptEl?.src || '';
     const baseUrl = scriptSrc ? scriptSrc.replace(/widget\.js.*$/, '') : './';
 
     try {
