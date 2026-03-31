@@ -44,7 +44,7 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     .jn-trigger-wrap {
-      position: fixed; bottom: 24px; right: 24px; z-index: 99999;
+      position: fixed; bottom: 100px; right: 24px; z-index: 99999;
       display: flex; align-items: center; gap: 0;
     }
 
@@ -216,7 +216,7 @@
         width: 100%; height: 100%;
         border-radius: 0;
       }
-      .jn-trigger-wrap { bottom: 16px; right: 16px; }
+      .jn-trigger-wrap { bottom: 80px; right: 16px; }
       .jn-trigger-wrap.open .jn-trigger { display: none; }
       .jn-trigger-label { font-size: 12px; padding: 6px 12px 6px 10px; }
       .jn-header-close { display: flex; align-items: center; justify-content: center; }
@@ -932,6 +932,20 @@
 
   trigger.addEventListener('click', toggle);
   container.querySelector('.jn-header-close').addEventListener('click', toggle);
+
+  // Auto-open on mobile after 3 seconds (only once per session)
+  if (window.innerWidth <= 480) {
+    try {
+      if (!sessionStorage.getItem('jikonavi_auto_opened')) {
+        setTimeout(() => {
+          if (!state.isOpen) {
+            toggle();
+            sessionStorage.setItem('jikonavi_auto_opened', '1');
+          }
+        }, 3000);
+      }
+    } catch (e) { /* sessionStorage blocked */ }
+  }
 
   // ── Init ────────────────────────────────────────────────
   async function initChat() {
