@@ -933,13 +933,16 @@
   trigger.addEventListener('click', toggle);
   container.querySelector('.jn-header-close').addEventListener('click', toggle);
 
-  // Auto-open on mobile after 3 seconds (only once per session)
+  // Expose global API so external buttons can open the chat
+  window.jikonautoChat = { toggle, open: () => { if (!state.isOpen) toggle(); } };
+
+  // Auto-open on mobile after 4 seconds (only once per session)
   if (window.innerWidth <= 480) {
     try {
       if (!sessionStorage.getItem('jikonavi_auto_opened')) {
         setTimeout(() => {
           if (!state.isOpen) {
-            toggle();
+            window.jikonautoChat.open();
             sessionStorage.setItem('jikonavi_auto_opened', '1');
           }
         }, 4000);
