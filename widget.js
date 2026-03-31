@@ -10,6 +10,7 @@
   const CONFIG = {
     edgeFunctionUrl: 'https://dxbdqldfqlggsrpcjuwg.supabase.co/functions/v1/chat',
     trackUrl: 'https://dxbdqldfqlggsrpcjuwg.supabase.co/functions/v1/chat-track',
+    supabaseAnonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4YmRxbGRmcWxnZ3NycGNqdXdnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2ODczNDgsImV4cCI6MjA4ODI2MzM0OH0.19yhx6Emt3xD4h5goRRQf5Ga4rom3cSur1G5ZRY_FMs',
     brandColor: '#1a5995',
     accentColor: '#027c96',
     widgetWidth: 380,
@@ -761,7 +762,7 @@
     try {
       const response = await fetch(CONFIG.edgeFunctionUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + CONFIG.supabaseAnonKey },
         body: JSON.stringify({
           session_id: state.sessionId,
           user_name: state.userName,
@@ -886,7 +887,7 @@
     try {
       const response = await fetch(CONFIG.edgeFunctionUrl.replace('/chat', '/chat-form'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + CONFIG.supabaseAnonKey },
         body: JSON.stringify({
           session_id: state.sessionId,
           form_data: state.formData,
