@@ -273,24 +273,40 @@ serve(async (req) => {
 
     // ── Send email notification via GAS webhook ─────────
     const GAS_WEBHOOK_URL = Deno.env.get("GAS_NOTIFY_WEBHOOK_URL");
+    const GAS_SECRET = Deno.env.get("GAS_WEBHOOK_SECRET");
     try {
-      const gasRes = await fetch(GAS_WEBHOOK_URL, {
+      const gasBody = JSON.stringify({
+        source: 'chatbot',
+        name: form_data.name || '',
+        phone,
+        area,
+        inquiry_type: form_data.inquiry_type || '',
+        accident_type: form_data.accident_type || '',
+        contact_time: form_data.contact_time || '',
+        page_url: page_url || '',
+      });
+
+      // HMAC signature for GAS webhook auth
+      let gasUrl = GAS_WEBHOOK_URL!;
+      if (GAS_SECRET) {
+        const ts = Math.floor(Date.now() / 1000).toString();
+        const signedPayload = ts + '.' + gasBody;
+        const key = await crypto.subtle.importKey(
+          'raw', new TextEncoder().encode(GAS_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+        );
+        const sigBuf = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(signedPayload));
+        const sig = btoa(String.fromCharCode(...new Uint8Array(sigBuf)));
+        gasUrl += (gasUrl.includes('?') ? '&' : '?') + `sig=${encodeURIComponent(sig)}&ts=${ts}`;
+      }
+
+      const gasRes = await fetch(gasUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json; charset=utf-8', 'Accept': 'application/json' },
         redirect: 'follow',
-        body: JSON.stringify({
-          source: 'chatbot',
-          name: form_data.name || '',
-          phone,
-          area,
-          inquiry_type: form_data.inquiry_type || '',
-          accident_type: form_data.accident_type || '',
-          contact_time: form_data.contact_time || '',
-          page_url: page_url || '',
-        }),
+        body: gasBody,
       });
-      const gasBody = await gasRes.text();
-      console.log('GAS webhook response:', { status: gasRes.status, body: gasBody.slice(0, 300) });
+      const gasResBody = await gasRes.text();
+      console.log('GAS webhook response:', { status: gasRes.status, body: gasResBody.slice(0, 300) });
       if (!gasRes.ok) {
         console.error('GAS webhook non-2xx:', gasRes.status);
       }
