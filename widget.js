@@ -954,17 +954,18 @@
 
     try {
       // Try variant-specific scenario first (for A/B testing)
+      const cacheBust = '?t=' + Date.now();
       if (state.abVariant !== 'a') {
-        const variantRes = await fetch(baseUrl + `scenario_${state.abVariant}.json`);
+        const variantRes = await fetch(baseUrl + `scenario_${state.abVariant}.json` + cacheBust);
         if (variantRes.ok) {
           state.scenarioData = await variantRes.json();
         } else {
           // Variant file not found — fall back to default
-          const res = await fetch(baseUrl + 'scenario.json');
+          const res = await fetch(baseUrl + 'scenario.json' + cacheBust);
           state.scenarioData = await res.json();
         }
       } else {
-        const res = await fetch(baseUrl + 'scenario.json');
+        const res = await fetch(baseUrl + 'scenario.json' + cacheBust);
         state.scenarioData = await res.json();
       }
     } catch (e) {

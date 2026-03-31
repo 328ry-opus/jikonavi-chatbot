@@ -2,9 +2,9 @@
   "root": {
     "message": "どのようなご相談ですか？",
     "options": [
-      { "label": "通院先を探している・変更したい", "next": "step1_accident", "form_value": "通院先を探している・変更したい" },
-      { "label": "その他のご相談", "next": "step1_accident", "form_value": "その他のご相談" },
-      { "label": "慰謝料や事故の疑問を質問する（AI対応）", "action": "switch_to_ai" },
+      { "label": "通院先を探している", "next": "step1_accident", "form_value": "通院先を探している" },
+      { "label": "通院先を変更したい", "next": "step1_accident", "form_value": "通院先を変更したい" },
+      { "label": "その他のご相談（慰謝料・診断書について）", "next": "step1_accident", "form_value": "その他のご相談" },
       { "label": "すぐに電話で相談したい", "next": "phone" }
     ]
   },
@@ -102,7 +102,6 @@
     "message": "ご相談ありがとうございます！\n専門スタッフからご連絡いたしますので、しばらくお待ちください。\n\nお急ぎの場合はお電話でもご相談いただけます。",
     "options": [
       { "label": "電話で相談する", "next": "phone" },
-      { "label": "質問がある（AI対応）", "action": "switch_to_ai" },
       { "label": "最初に戻る", "next": "root" }
     ],
     "phone_number": "0120-911-427"
@@ -111,7 +110,6 @@
     "message": "お電話でのご相談はこちらから。専門スタッフが無料でご対応いたします。\n\n0120-911-427\n受付時間：9:00〜21:00（年中無休）\n\nお気軽にお電話ください。",
     "options": [
       { "label": "チャットで相談する", "next": "step1_accident" },
-      { "label": "自由に質問する（AI対応）", "action": "switch_to_ai" },
       { "label": "最初に戻る", "next": "root" }
     ],
     "phone_number": "0120-911-427"
