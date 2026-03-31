@@ -216,7 +216,7 @@
         width: 100%; height: 100%;
         border-radius: 0;
       }
-      .jn-trigger-wrap { bottom: 80px; right: 16px; }
+      .jn-trigger-wrap { bottom: 95px; right: 16px; }
       .jn-trigger-wrap.open .jn-trigger { display: none; }
       .jn-trigger-label { font-size: 12px; padding: 6px 12px 6px 10px; }
       .jn-header-close { display: flex; align-items: center; justify-content: center; }
@@ -942,7 +942,7 @@
             toggle();
             sessionStorage.setItem('jikonavi_auto_opened', '1');
           }
-        }, 3000);
+        }, 4000);
       }
     } catch (e) { /* sessionStorage blocked */ }
   }
