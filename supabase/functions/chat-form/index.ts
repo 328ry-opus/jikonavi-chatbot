@@ -241,7 +241,6 @@ serve(async (req) => {
       area ? `希望エリア: ${area}` : '',
       form_data.contact_time ? `連絡希望: ${form_data.contact_time}` : '',
       kanaPredicted ? `ふりがな「${nameKana}」はAI予測です（要確認）` : '',
-      page_url ? `送信元: ${page_url}` : '',
     ].filter(Boolean).join('\n') + dupNote;
 
     const { error: patientError } = await supabase.from('patients').insert({
