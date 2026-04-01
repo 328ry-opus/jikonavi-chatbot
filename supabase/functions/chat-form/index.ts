@@ -226,10 +226,18 @@ serve(async (req) => {
     const timeStr = jst.toISOString().slice(11, 16);
     const patientId = 'p' + Date.now();
 
+    // Normalize fields across A/B scenario variants
+    const accidentSituation = form_data.accident_situation || form_data.accident_type || '';
+    const symptoms = form_data.symptoms || '';
+    const injuryStatus = form_data.injury_status || '';
+    const accidentDate = form_data.accident_date || null;
+
     const notes = [
       '【チャットbot経由】',
       form_data.inquiry_type ? `相談内容: ${form_data.inquiry_type}` : '',
-      form_data.accident_type ? `事故状況: ${form_data.accident_type}` : '',
+      accidentSituation ? `事故状況: ${accidentSituation}` : '',
+      symptoms ? `症状: ${symptoms}` : '',
+      injuryStatus ? `けがの状況: ${injuryStatus}` : '',
       area ? `希望エリア: ${area}` : '',
       form_data.contact_time ? `連絡希望: ${form_data.contact_time}` : '',
       kanaPredicted ? `ふりがな「${nameKana}」はAI予測です（要確認）` : '',
@@ -247,6 +255,8 @@ serve(async (req) => {
       staff: 'ボット',
       inquiry_date: todayStr,
       inquiry_time: timeStr,
+      accident_date: accidentDate,
+      injury_part: symptoms,
       next_date: todayStr,
       notes,
       check_permission: false,
@@ -281,7 +291,9 @@ serve(async (req) => {
         phone,
         area,
         inquiry_type: form_data.inquiry_type || '',
-        accident_type: form_data.accident_type || '',
+        accident_type: accidentSituation,
+        accident_date: accidentDate || '',
+        symptoms: symptoms,
         contact_time: form_data.contact_time || '',
         page_url: page_url || '',
       });
