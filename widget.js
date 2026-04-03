@@ -926,6 +926,9 @@
 
     if (state.isOpen && state.messages.length === 0) {
       initChat();
+      // GTM tracking: push event for ad conversion measurement
+      window.dataLayer = window.dataLayer || [];
+      window.dataLayer.push({ event: 'jn_chat_open', jn_open_method: 'trigger_click' });
     } else if (!state.isOpen && state.messages.length > 0) {
       trackEvent('close', state.currentNodeId);
     }
