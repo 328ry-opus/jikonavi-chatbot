@@ -336,6 +336,7 @@
   const aiBanner = container.querySelector('.jn-ai-banner');
   const inputEl = container.querySelector('.jn-input');
   const sendBtn = container.querySelector('.jn-send-btn');
+  const inputArea = container.querySelector('.jn-input-area');
 
   // ── Helpers ─────────────────────────────────────────────
   function scrollToBottom() {
@@ -466,6 +467,7 @@
       state.mode = 'form_input';
       state.currentNodeId = nodeId;
       aiBanner.style.display = 'none';
+      inputArea.style.display = 'none';
       addMessage(node.message, 'bot');
       showBackButton();
       setInputPlaceholder('フォームに入力してください');
@@ -480,6 +482,7 @@
       state.currentFormField = node.form_field;
       state.currentFormNext = node.next;
       aiBanner.style.display = 'none';
+      inputArea.style.display = 'flex';
       addMessage(node.message, 'bot');
       showBackButton();
       setInputPlaceholder(node.input_placeholder || 'ここに入力...');
@@ -492,7 +495,7 @@
     state.mode = 'scenario';
     state.currentNodeId = nodeId;
     aiBanner.style.display = 'none';
-    setInputPlaceholder('選択肢をお選びください');
+    inputArea.style.display = 'none';
 
     addMessage(node.message, 'bot');
     if (node.options) {
@@ -740,6 +743,7 @@
   function switchToAiMode() {
     state.mode = 'ai';
     aiBanner.style.display = 'block';
+    inputArea.style.display = 'flex';
     setInputPlaceholder('質問を入力してください...');
     addMessage('交通事故に関することなら、何でもお気軽にご質問ください。', 'bot');
     inputEl.focus();
@@ -872,11 +876,9 @@
       return;
     }
 
-    // In scenario mode, if user types freely, switch to AI
+    // In scenario mode, ignore free text input (input area is hidden)
     if (state.mode === 'scenario') {
-      clearOptions();
-      switchToAiMode();
-      sendAiMessage(text);
+      return;
     }
   }
 
@@ -995,9 +997,9 @@
       console.error('Jikonavi: scenario.json load failed', e);
       state.scenarioData = {
         root: {
-          message: 'どのようなご相談ですか？',
+          message: '申し訳ありません。読み込みに失敗しました。お電話（0120-911-427）でご相談ください。',
           options: [
-            { label: '自由に質問する（AI対応）', action: 'switch_to_ai' },
+            { label: '電話で相談する', next: 'phone' },
           ],
         },
       };
