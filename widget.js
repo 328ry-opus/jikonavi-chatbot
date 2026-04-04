@@ -258,6 +258,19 @@
     }
     .jn-form-input:focus { border-color: ${CONFIG.brandColor}; }
     .jn-form-input::placeholder { color: #aaa; }
+    /* iOS Safari date input overflow fix */
+    .jn-date-shell {
+      display: flex; align-items: center; width: 100%; min-width: 0;
+      padding: 8px 12px; border: 1.5px solid #ddd; border-radius: 8px;
+      background: #fff; overflow: hidden; box-sizing: border-box;
+    }
+    .jn-date-shell:focus-within { border-color: ${CONFIG.brandColor}; }
+    .jn-date-shell input[type="date"] {
+      flex: 1 1 auto; width: 100%; min-width: 0;
+      padding: 0; border: 0; background: transparent;
+      font-size: 13px; font-family: inherit; outline: none;
+      appearance: auto; -webkit-appearance: auto;
+    }
 
     .jn-form-submit {
       width: 100%; padding: 12px; border: none; border-radius: 10px;
@@ -565,15 +578,17 @@
         group.appendChild(cbGroup);
 
       } else if (field.type === 'date') {
+        const shell = document.createElement('div');
+        shell.className = 'jn-date-shell';
         const input = document.createElement('input');
         input.type = 'date';
-        input.className = 'jn-form-input';
         input.required = !!field.required;
         // Default to today
         input.value = new Date().toISOString().split('T')[0];
         formState[field.field] = input.value;
         input.addEventListener('change', () => { formState[field.field] = input.value; });
-        group.appendChild(input);
+        shell.appendChild(input);
+        group.appendChild(shell);
 
       } else if (field.type === 'textarea') {
         const textarea = document.createElement('textarea');
