@@ -36,6 +36,7 @@
     currentFormField: null,
     currentFormNext: null,
     currentNodeId: null,
+    inputStartTracked: false,
     nodeHistory: [],
   };
 
@@ -455,6 +456,12 @@
     } catch (e) { /* tracking should never break the widget */ }
   }
 
+  function trackInputStart(nodeId) {
+    if (state.inputStartTracked) return;
+    state.inputStartTracked = true;
+    trackEvent('input_start', nodeId);
+  }
+
   // ── Scenario logic ──────────────────────────────────────
   function showScenarioNode(nodeId, skipHistory) {
     const node = state.scenarioData[nodeId];
@@ -485,6 +492,7 @@
       showBackButton();
       setInputPlaceholder('フォームに入力してください');
       inputEl.disabled = true;
+      trackInputStart(nodeId);
       renderMultiFieldForm(node);
       return;
     }
@@ -500,6 +508,7 @@
       showBackButton();
       setInputPlaceholder(node.input_placeholder || 'ここに入力...');
       inputEl.type = node.input_type === 'tel' ? 'tel' : 'text';
+      trackInputStart(nodeId);
       inputEl.focus();
       return;
     }
