@@ -20,6 +20,15 @@
     greeting: '交通事故に遭われた方へ\n\n通院前に事故なびへ無料相談すると、お見舞金 最大50,000円をお受け取りいただけます。\nまずはお気軽にご相談ください。',
   };
 
+  // Experiment config (max 2 variants at a time)
+  const EXPERIMENT = {
+    id: 'intake_flow',
+    variants: [
+      { key: 'a', weight: 0.5, file: 'scenario.json' },
+      { key: 'b', weight: 0.5, file: 'scenario_b.json' },
+    ],
+  };
+
   // ── State ───────────────────────────────────────────────
   const state = {
     isOpen: false,
@@ -28,6 +37,8 @@
     messages: [],
     sessionId: crypto.randomUUID(),
     abVariant: 'a',
+    experimentId: EXPERIMENT.id,
+    scenarioVersion: 'unknown',
     userName: '',
     conversationHistory: [],
     isLoading: false,
@@ -446,6 +457,8 @@
         event,
         node: node || state.currentNodeId || null,
         variant: state.abVariant,
+        experiment_id: state.experimentId,
+        scenario_version: state.scenarioVersion,
         metadata: metadata || null,
       });
       if (navigator.sendBeacon) {
@@ -918,6 +931,8 @@
           session_id: state.sessionId,
           form_data: state.formData,
           variant: state.abVariant,
+          experiment_id: state.experimentId,
+          scenario_version: state.scenarioVersion,
           page_url: window.location.href,
         }),
       });
@@ -982,40 +997,50 @@
 
   // ── Init ────────────────────────────────────────────────
   async function initChat() {
-    // A/B test variant assignment
+    // Variant assignment (persisted per experiment)
     try {
-      let variant = localStorage.getItem('jikonavi_ab_variant');
-      if (!variant) {
-        variant = Math.random() < 0.5 ? 'a' : 'b';
-        localStorage.setItem('jikonavi_ab_variant', variant);
+      const storageKey = `jikonavi_variant_${EXPERIMENT.id}`;
+      let variant = localStorage.getItem(storageKey);
+      if (!variant || !EXPERIMENT.variants.some(v => v.key === variant)) {
+        // Normalize weights so they always sum to 1
+        const totalWeight = EXPERIMENT.variants.reduce((s, v) => s + v.weight, 0) || 1;
+        const rand = Math.random();
+        let cumulative = 0;
+        for (const v of EXPERIMENT.variants) {
+          cumulative += v.weight / totalWeight;
+          if (rand < cumulative) {
+            variant = v.key;
+            break;
+          }
+        }
+        variant = variant || EXPERIMENT.variants[0].key;
+        localStorage.setItem(storageKey, variant);
       }
       state.abVariant = variant;
     } catch (e) {
-      state.abVariant = 'a'; // localStorage blocked (e.g. incognito)
+      state.abVariant = EXPERIMENT.variants[0].key; // localStorage blocked (e.g. incognito)
     }
 
-    // Load scenario data (use variant-specific file if available)
+    // Load scenario data from experiment config
     // Find widget script by src to reliably get base URL (currentScript may be null with defer)
     const scriptEl = document.currentScript
       || document.querySelector('script[src*="widget.js"]');
     const scriptSrc = scriptEl?.src || '';
     const baseUrl = scriptSrc ? scriptSrc.replace(/widget\.js.*$/, '') : './';
 
+    const assignedVariant = EXPERIMENT.variants.find(v => v.key === state.abVariant) || EXPERIMENT.variants[0];
+    const scenarioFile = assignedVariant.file || EXPERIMENT.variants[0].file;
+
     try {
-      // Try variant-specific scenario first (for A/B testing)
       const cacheBust = '?t=' + Date.now();
-      if (state.abVariant !== 'a') {
-        const variantRes = await fetch(baseUrl + `scenario_${state.abVariant}.json` + cacheBust);
-        if (variantRes.ok) {
-          state.scenarioData = await variantRes.json();
-        } else {
-          // Variant file not found — fall back to default
-          const res = await fetch(baseUrl + 'scenario.json' + cacheBust);
-          state.scenarioData = await res.json();
-        }
+      const scenarioRes = await fetch(baseUrl + scenarioFile + cacheBust);
+      if (scenarioRes.ok) {
+        state.scenarioData = await scenarioRes.json();
       } else {
-        const res = await fetch(baseUrl + 'scenario.json' + cacheBust);
-        state.scenarioData = await res.json();
+        // Fallback to control scenario if target file is missing
+        const fallbackRes = await fetch(baseUrl + EXPERIMENT.variants[0].file + cacheBust);
+        state.scenarioData = await fallbackRes.json();
+        state.abVariant = EXPERIMENT.variants[0].key;
       }
     } catch (e) {
       console.error('Jikonavi: scenario.json load failed', e);
@@ -1028,6 +1053,10 @@
         },
       };
     }
+
+    const scenarioMeta = state.scenarioData?._meta || {};
+    state.experimentId = scenarioMeta.experiment_id || EXPERIMENT.id;
+    state.scenarioVersion = scenarioMeta.scenario_version || 'unknown';
 
     // Track chat open
     trackEvent('open', null);

@@ -44,7 +44,7 @@ serve(async (req) => {
     const text = await req.text();
     const body = JSON.parse(text);
 
-    const { session_id, event, node, variant, metadata } = body;
+    const { session_id, event, node, variant, experiment_id, scenario_version, metadata } = body;
 
     if (!session_id || !event || !VALID_EVENTS.has(event)) {
       return new Response(null, { status: 400, headers });
@@ -64,6 +64,8 @@ serve(async (req) => {
       event,
       node: node || null,
       variant: variant || 'a',
+      experiment_id: experiment_id || null,
+      scenario_version: scenario_version || null,
       metadata: metadata || null,
     }).then(({ error }) => {
       if (error) console.error('chat_events insert error:', error.message);

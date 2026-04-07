@@ -1,4 +1,9 @@
 {
+  "_meta": {
+    "experiment_id": "intake_flow",
+    "variant": "a",
+    "scenario_version": "2026-04-07"
+  },
   "root": {
     "message": "どのようなご相談ですか？",
     "options": [

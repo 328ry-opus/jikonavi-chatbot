@@ -39,7 +39,7 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { session_id, form_data, variant, page_url } = body;
+    const { session_id, form_data, variant, experiment_id, scenario_version, page_url } = body;
 
     if (!session_id || !form_data) {
       return new Response(
@@ -277,6 +277,8 @@ serve(async (req) => {
       patient_id: patientId,
       converted: true,
       variant: variant || 'a',
+      experiment_id: experiment_id || null,
+      scenario_version: scenario_version || null,
     }).eq('session_id', session_id);
     if (linkError) console.error('Session link error:', linkError.message);
 
