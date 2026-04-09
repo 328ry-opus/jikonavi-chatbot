@@ -15,10 +15,23 @@ const ALLOWED_ORIGINS = [
   'http://127.0.0.1',
 ];
 
+function isAllowedOrigin(origin: string): boolean {
+  if (!origin) return false;
+  try {
+    const parsed = new URL(origin);
+    if (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') return true;
+    const normalized = parsed.origin;
+    return ALLOWED_ORIGINS.some((o) => {
+      try { return normalized === new URL(o).origin; } catch { return false; }
+    });
+  } catch {
+    return false;
+  }
+}
+
 function corsHeaders(origin: string) {
-  const allowed = ALLOWED_ORIGINS.some((o) => origin?.startsWith(o)) || origin?.includes('localhost') || origin?.includes('127.0.0.1');
   return {
-    'Access-Control-Allow-Origin': allowed ? origin : ALLOWED_ORIGINS[0],
+    'Access-Control-Allow-Origin': isAllowedOrigin(origin) ? origin : ALLOWED_ORIGINS[0],
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   };
@@ -224,7 +237,7 @@ serve(async (req) => {
     const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
     const todayStr = jst.toISOString().slice(0, 10);
     const timeStr = jst.toISOString().slice(11, 16);
-    const patientId = 'p' + Date.now();
+    const patientId = 'p' + crypto.randomUUID().replace(/-/g, '').slice(0, 12);
 
     // Normalize fields across A/B scenario variants
     const accidentSituation = form_data.accident_situation || form_data.accident_type || '';

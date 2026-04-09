@@ -236,10 +236,24 @@ const ALLOWED_ORIGINS = [
   'http://127.0.0.1',
 ];
 
+function isAllowedOrigin(origin: string): boolean {
+  if (!origin) return false;
+  try {
+    const parsed = new URL(origin);
+    // Allow any localhost/127.0.0.1 regardless of port (dev environments)
+    if (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') return true;
+    const normalized = parsed.origin;
+    return ALLOWED_ORIGINS.some((o) => {
+      try { return normalized === new URL(o).origin; } catch { return false; }
+    });
+  } catch {
+    return false;
+  }
+}
+
 function corsHeaders(origin: string) {
-  const allowed = ALLOWED_ORIGINS.some((o) => origin?.startsWith(o)) || origin?.includes('localhost') || origin?.includes('127.0.0.1');
   return {
-    'Access-Control-Allow-Origin': allowed ? origin : ALLOWED_ORIGINS[0],
+    'Access-Control-Allow-Origin': isAllowedOrigin(origin) ? origin : ALLOWED_ORIGINS[0],
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   };
