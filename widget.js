@@ -939,6 +939,9 @@
 
       if (!response.ok) throw new Error('Submit failed');
 
+      // GTM tracking: push event for form submission conversion (non-blocking)
+      try { window.dataLayer = window.dataLayer || []; window.dataLayer.push({ event: 'jn_chat_submit', jn_variant: state.abVariant }); } catch (_) {}
+
       showScenarioNode('complete');
     } catch (err) {
       console.error('Form submit error:', err);
@@ -969,7 +972,7 @@
       initChat();
       // GTM tracking: push event for ad conversion measurement
       window.dataLayer = window.dataLayer || [];
-      window.dataLayer.push({ event: 'jn_chat_open', jn_open_method: 'trigger_click' });
+      window.dataLayer.push({ event: 'jn_chat_open', jn_open_method: state.autoOpened ? 'auto' : 'manual' });
     } else if (!state.isOpen && state.messages.length > 0) {
       trackEvent('close', state.currentNodeId);
     }
@@ -987,6 +990,7 @@
       if (!sessionStorage.getItem('jikonavi_auto_opened')) {
         setTimeout(() => {
           if (!state.isOpen) {
+            state.autoOpened = true;
             window.jikonautoChat.open();
             sessionStorage.setItem('jikonavi_auto_opened', '1');
           }
