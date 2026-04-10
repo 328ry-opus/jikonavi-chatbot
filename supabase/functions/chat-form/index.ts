@@ -52,7 +52,7 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { session_id, form_data, variant, experiment_id, scenario_version, page_url } = body;
+    const { session_id, form_data, variant, experiment_id, scenario_version, page_url, user_agent, device_type } = body;
 
     if (!session_id || !form_data) {
       return new Response(
@@ -78,6 +78,8 @@ serve(async (req) => {
         started_at: new Date().toISOString(),
         message_count: 0,
         used_ai: false,
+        user_agent: user_agent || null,
+        device_type: device_type || null,
       },
       { onConflict: 'session_id', ignoreDuplicates: false },
     );

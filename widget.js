@@ -934,6 +934,8 @@
           experiment_id: state.experimentId,
           scenario_version: state.scenarioVersion,
           page_url: window.location.href,
+          user_agent: navigator.userAgent,
+          device_type: /Mobile|Android|iPhone/i.test(navigator.userAgent) ? 'mobile' : 'desktop',
         }),
       });
 
