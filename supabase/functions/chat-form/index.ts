@@ -115,7 +115,7 @@ serve(async (req) => {
     }
 
     // ── Normalize phone number ──────────────────────────
-    let phone = (form_data.phone || '').replace(/[\s\-\u2010-\u2015\u2212\uFF0D]/g, '').replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+    let phone = (form_data.phone || '').replace(/[\s\-\u2010-\u2015\u2212\uFF0D]/g, '').replace(/[０-９]/g, (c: string) => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
     if (/^0[789]0\d{8}$/.test(phone)) {
       // Mobile: 090-1234-5678
       phone = phone.slice(0, 3) + '-' + phone.slice(3, 7) + '-' + phone.slice(7);
@@ -245,7 +245,14 @@ serve(async (req) => {
     const accidentSituation = form_data.accident_situation || form_data.accident_type || '';
     const symptoms = form_data.symptoms || '';
     const injuryStatus = form_data.injury_status || '';
-    const accidentDate = form_data.accident_date || null;
+    // Browsers without <input type="date"> support (e.g. Nintendo Switch)
+    // fall back to free text. Reject non-dates to avoid Postgres date-cast
+    // errors (insert would 500 and lose the lead); keep raw text in notes.
+    const rawAccidentDate = String(form_data.accident_date || '').trim();
+    const accidentDate = /^\d{4}-\d{2}-\d{2}$/.test(rawAccidentDate) && !isNaN(Date.parse(rawAccidentDate))
+      ? rawAccidentDate
+      : null;
+    const accidentDateNote = !accidentDate && rawAccidentDate ? `事故日(入力原文): ${rawAccidentDate}` : '';
 
     const notes = [
       '【チャットbot経由】',
@@ -253,6 +260,7 @@ serve(async (req) => {
       accidentSituation ? `事故状況: ${accidentSituation}` : '',
       symptoms ? `症状: ${symptoms}` : '',
       injuryStatus ? `けがの状況: ${injuryStatus}` : '',
+      accidentDateNote,
       area ? `希望エリア: ${area}` : '',
       form_data.contact_time ? `連絡希望: ${form_data.contact_time}` : '',
       kanaPredicted ? `ふりがな「${nameKana}」はAI予測です（要確認）` : '',
@@ -308,7 +316,7 @@ serve(async (req) => {
         area,
         inquiry_type: form_data.inquiry_type || '',
         accident_type: accidentSituation,
-        accident_date: accidentDate || '',
+        accident_date: accidentDate || rawAccidentDate || '',
         symptoms: symptoms,
         contact_time: form_data.contact_time || '',
         page_url: page_url || '',
