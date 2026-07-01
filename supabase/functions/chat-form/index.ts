@@ -48,6 +48,14 @@ function corsHeaders(origin: string) {
 const UNSUPPORTED_BROWSER_MESSAGE =
   "このブラウザからはチャット送信を受け付けていません。お手数ですが、お電話（0120-911-427）でご相談ください。";
 const DB_RETRY_DELAY_MS = 700;
+type DbRetryResult = {
+  error?: unknown | null;
+  data?: unknown;
+};
+type DuplicateInsertRecovery<T extends DbRetryResult> = {
+  knownId: string;
+  verifyExisting: () => PromiseLike<T>;
+};
 
 function isNintendoSwitchBrowser(
   ...userAgents: Array<string | null | undefined>
@@ -78,14 +86,29 @@ function safeError(error: unknown) {
   return { message: String(error) };
 }
 
-async function withSingleDbRetry<T extends { error?: unknown | null }>(
+function isUniqueViolation(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const value = error as { code?: unknown; message?: unknown };
+  const message = typeof value.message === "string" ? value.message : "";
+  return value.code === "23505" ||
+    message.includes("duplicate") ||
+    message.includes("unique");
+}
+
+async function withSingleDbRetry<T extends DbRetryResult>(
   label: string,
   context: Record<string, string | null>,
   operation: () => PromiseLike<T>,
+  duplicateInsertRecovery?: DuplicateInsertRecovery<T>,
 ): Promise<T> {
+  let firstWasUniqueViolation = false;
   try {
     const first = await operation();
     if (!first.error) return first;
+    firstWasUniqueViolation = isUniqueViolation(first.error);
+    if (firstWasUniqueViolation && duplicateInsertRecovery) {
+      return first;
+    }
     console.warn(`${label} failed; retrying once`, {
       ...context,
       error: safeError(first.error),
@@ -102,6 +125,25 @@ async function withSingleDbRetry<T extends { error?: unknown | null }>(
   try {
     const second = await operation();
     if (second.error) {
+      if (
+        duplicateInsertRecovery &&
+        !firstWasUniqueViolation &&
+        isUniqueViolation(second.error)
+      ) {
+        const verified = await duplicateInsertRecovery.verifyExisting();
+        if (!verified.error && verified.data) {
+          console.warn(`${label} retry duplicate matched known id`, {
+            ...context,
+            known_id: duplicateInsertRecovery.knownId,
+          });
+          return { ...second, data: verified.data, error: null } as T;
+        }
+        console.warn(`${label} duplicate recovery verification failed`, {
+          ...context,
+          known_id: duplicateInsertRecovery.knownId,
+          error: safeError(verified.error),
+        });
+      }
       console.warn(`${label} retry failed`, {
         ...context,
         error: safeError(second.error),
@@ -460,6 +502,15 @@ serve(async (req) => {
             check_contacted: false,
             check_sent: false,
           }),
+        {
+          knownId: patientId,
+          verifyExisting: () =>
+            supabase
+              .from("patients")
+              .select("id")
+              .eq("id", patientId)
+              .maybeSingle(),
+        },
       );
       patientError = insertResult.error;
     } catch (error) {
