@@ -95,6 +95,31 @@ function isUniqueViolation(error: unknown): boolean {
     message.includes("unique");
 }
 
+async function verifyDuplicateRecovery<T extends DbRetryResult>(
+  label: string,
+  context: Record<string, string | null>,
+  duplicateInsertRecovery: DuplicateInsertRecovery<T>,
+): Promise<T> {
+  try {
+    const first = await duplicateInsertRecovery.verifyExisting();
+    if (!first.error) return first;
+    console.warn(`${label} duplicate recovery verification failed; retrying once`, {
+      ...context,
+      known_id: duplicateInsertRecovery.knownId,
+      error: safeError(first.error),
+    });
+  } catch (error) {
+    console.warn(`${label} duplicate recovery verification threw; retrying once`, {
+      ...context,
+      known_id: duplicateInsertRecovery.knownId,
+      error: safeError(error),
+    });
+  }
+
+  await sleep(DB_RETRY_DELAY_MS);
+  return duplicateInsertRecovery.verifyExisting();
+}
+
 async function withSingleDbRetry<T extends DbRetryResult>(
   label: string,
   context: Record<string, string | null>,
@@ -130,7 +155,11 @@ async function withSingleDbRetry<T extends DbRetryResult>(
         !firstWasUniqueViolation &&
         isUniqueViolation(second.error)
       ) {
-        const verified = await duplicateInsertRecovery.verifyExisting();
+        const verified = await verifyDuplicateRecovery(
+          label,
+          context,
+          duplicateInsertRecovery,
+        );
         if (!verified.error && verified.data) {
           console.warn(`${label} retry duplicate matched known id`, {
             ...context,
