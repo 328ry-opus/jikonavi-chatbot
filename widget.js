@@ -939,7 +939,20 @@
         }),
       });
 
-      if (!response.ok) throw new Error('Submit failed');
+      if (!response.ok) {
+        let errorBody = null;
+        try {
+          errorBody = await response.json();
+        } catch (_) {
+          errorBody = null;
+        }
+        if (response.status === 403 && errorBody?.code === 'unsupported_browser') {
+          addMessage(errorBody.message || 'このブラウザからは送信できません。お手数ですがお電話でご連絡ください。', 'bot');
+          showScenarioNode('phone');
+          return;
+        }
+        throw new Error('Submit failed');
+      }
 
       // GTM tracking: push event for form submission conversion (non-blocking)
       try { window.dataLayer = window.dataLayer || []; window.dataLayer.push({ event: 'jn_chat_submit', jn_variant: state.abVariant }); } catch (_) {}
