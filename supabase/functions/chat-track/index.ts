@@ -39,6 +39,37 @@ function corsHeaders(origin: string) {
 }
 
 const VALID_EVENTS = new Set(['open', 'navigate', 'input_start', 'phone_tap', 'ai_switch', 'submit', 'close']);
+const VALID_METADATA_KEYS = new Set(['uid', 'trigger', 'internal', 'reason', 'page']);
+const MAX_METADATA_BYTES = 1024;
+const MAX_STRING_LENGTH = 200;
+
+function sanitizeMetadata(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+
+  const source = value as Record<string, unknown>;
+  const cleaned: Record<string, unknown> = {};
+
+  for (const key of VALID_METADATA_KEYS) {
+    const raw = source[key];
+    if (raw === undefined || raw === null) continue;
+
+    if (key === 'internal') {
+      if (raw === true) cleaned[key] = true;
+      continue;
+    }
+
+    if (typeof raw !== 'string') continue;
+    const trimmed = raw.trim();
+    if (!trimmed) continue;
+    cleaned[key] = trimmed.slice(0, MAX_STRING_LENGTH);
+  }
+
+  if (Object.keys(cleaned).length === 0) return null;
+
+  const json = JSON.stringify(cleaned);
+  if (new TextEncoder().encode(json).length > MAX_METADATA_BYTES) return null;
+  return cleaned;
+}
 
 serve(async (req) => {
   const origin = req.headers.get('origin') || '';
@@ -76,10 +107,11 @@ serve(async (req) => {
       session_id,
       event,
       node: node || null,
+      // Keep legacy clients compatible: missing variant is treated as control A.
       variant: variant || 'a',
       experiment_id: experiment_id || null,
       scenario_version: scenario_version || null,
-      metadata: metadata || null,
+      metadata: sanitizeMetadata(metadata),
     }).then(({ error }) => {
       if (error) console.error('chat_events insert error:', error.message);
     });

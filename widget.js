@@ -36,6 +36,8 @@
     scenarioData: null,
     messages: [],
     sessionId: crypto.randomUUID(),
+    uid: null,
+    internal: false,
     abVariant: 'a',
     experimentId: EXPERIMENT.id,
     scenarioVersion: 'unknown',
@@ -49,6 +51,9 @@
     currentNodeId: null,
     inputStartTracked: false,
     nodeHistory: [],
+    closeTracked: false,
+    openTracked: false,
+    autoOpened: false,
   };
 
   // ── Styles ──────────────────────────────────────────────
@@ -449,9 +454,52 @@
     inputEl.disabled = loading;
   }
 
+  function pickVariant() {
+    const totalWeight = EXPERIMENT.variants.reduce((sum, variant) => sum + variant.weight, 0) || 1;
+    const rand = Math.random();
+    let cumulative = 0;
+    for (const variant of EXPERIMENT.variants) {
+      cumulative += variant.weight / totalWeight;
+      if (rand < cumulative) return variant.key;
+    }
+    return EXPERIMENT.variants[0].key;
+  }
+
+  function initTrackingIdentity() {
+    const params = new URLSearchParams(window.location.search || '');
+    const internalParam = params.get('jn_internal');
+
+    try {
+      let uid = localStorage.getItem('jikonavi_uid');
+      if (!uid) {
+        uid = crypto.randomUUID();
+        localStorage.setItem('jikonavi_uid', uid);
+      }
+      state.uid = uid;
+
+      if (internalParam === '1') {
+        localStorage.setItem('jikonavi_internal', '1');
+      } else if (internalParam === '0') {
+        localStorage.removeItem('jikonavi_internal');
+      }
+      state.internal = localStorage.getItem('jikonavi_internal') === '1';
+    } catch (e) {
+      state.uid = null;
+      state.internal = internalParam === '1';
+    }
+  }
+
+  function buildTrackingMetadata(metadata) {
+    const merged = { ...(metadata || {}) };
+    if (state.uid) merged.uid = state.uid;
+    if (state.internal) merged.internal = true;
+    return Object.keys(merged).length > 0 ? merged : null;
+  }
+
   // ── Event tracking ────────────────────────────────────────
   function trackEvent(event, node, metadata) {
     try {
+      const safeMetadata = buildTrackingMetadata(metadata);
       const payload = JSON.stringify({
         session_id: state.sessionId,
         event,
@@ -459,7 +507,7 @@
         variant: state.abVariant,
         experiment_id: state.experimentId,
         scenario_version: state.scenarioVersion,
-        metadata: metadata || null,
+        metadata: safeMetadata,
       });
       if (navigator.sendBeacon) {
         navigator.sendBeacon(CONFIG.trackUrl, payload);
@@ -467,6 +515,12 @@
         fetch(CONFIG.trackUrl, { method: 'POST', body: payload, keepalive: true }).catch(() => {});
       }
     } catch (e) { /* tracking should never break the widget */ }
+  }
+
+  function trackClose(reason) {
+    if (!state.openTracked || state.closeTracked) return;
+    state.closeTracked = true;
+    trackEvent('close', state.currentNodeId, reason ? { reason } : null);
   }
 
   function trackInputStart(nodeId) {
@@ -989,7 +1043,7 @@
       window.dataLayer = window.dataLayer || [];
       window.dataLayer.push({ event: 'jn_chat_open', jn_open_method: state.autoOpened ? 'auto' : 'manual' });
     } else if (!state.isOpen && state.messages.length > 0) {
-      trackEvent('close', state.currentNodeId);
+      trackClose();
     }
   }
 
@@ -998,6 +1052,13 @@
 
   // Expose global API so external buttons can open the chat
   window.jikonautoChat = { toggle, open: () => { if (!state.isOpen) toggle(); } };
+
+  window.addEventListener('pagehide', () => {
+    trackClose('pagehide');
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') trackClose('pagehide');
+  });
 
   // Auto-open on mobile after 4 seconds (only once per session)
   if (window.innerWidth <= 480) {
@@ -1021,23 +1082,12 @@
       const storageKey = `jikonavi_variant_${EXPERIMENT.id}`;
       let variant = localStorage.getItem(storageKey);
       if (!variant || !EXPERIMENT.variants.some(v => v.key === variant)) {
-        // Normalize weights so they always sum to 1
-        const totalWeight = EXPERIMENT.variants.reduce((s, v) => s + v.weight, 0) || 1;
-        const rand = Math.random();
-        let cumulative = 0;
-        for (const v of EXPERIMENT.variants) {
-          cumulative += v.weight / totalWeight;
-          if (rand < cumulative) {
-            variant = v.key;
-            break;
-          }
-        }
-        variant = variant || EXPERIMENT.variants[0].key;
+        variant = pickVariant();
         localStorage.setItem(storageKey, variant);
       }
       state.abVariant = variant;
     } catch (e) {
-      state.abVariant = EXPERIMENT.variants[0].key; // localStorage blocked (e.g. incognito)
+      state.abVariant = pickVariant(); // localStorage blocked: assign randomly for this load only.
     }
 
     // Load scenario data from experiment config
@@ -1078,7 +1128,11 @@
     state.scenarioVersion = scenarioMeta.scenario_version || 'unknown';
 
     // Track chat open
-    trackEvent('open', null);
+    state.openTracked = true;
+    trackEvent('open', null, {
+      trigger: state.autoOpened ? 'auto' : 'manual',
+      page: window.location.pathname || '/',
+    });
 
     addMessage(CONFIG.greeting, 'bot');
     state.nodeHistory.push('root');
@@ -1088,6 +1142,7 @@
   }
 
   // ── Mount ───────────────────────────────────────────────
+  initTrackingIdentity();
   document.body.appendChild(host);
 
 })();
