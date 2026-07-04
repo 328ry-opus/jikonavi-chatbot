@@ -116,6 +116,13 @@
     "form_type": "multi_field",
     "fields": [
       {
+        "field": "name",
+        "label": "お名前",
+        "type": "text",
+        "required": true,
+        "placeholder": "例：山田 太郎"
+      },
+      {
         "field": "phone",
         "label": "お電話番号",
         "type": "tel",
@@ -145,13 +152,6 @@
             "value": "いつでもOK"
           }
         ]
-      },
-      {
-        "field": "name",
-        "label": "お名前（任意）",
-        "type": "text",
-        "required": false,
-        "placeholder": "未入力でもOKです"
       }
     ],
     "next": "confirm"
