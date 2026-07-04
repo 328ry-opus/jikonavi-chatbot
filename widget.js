@@ -22,10 +22,10 @@
 
   // Experiment config (max 2 variants at a time)
   const EXPERIMENT = {
-    id: 'intake_flow',
+    id: 'contact_friction',
     variants: [
       { key: 'a', weight: 0.5, file: 'scenario.json' },
-      { key: 'b', weight: 0.5, file: 'scenario_b.json' },
+      { key: 'b', weight: 0.5, file: 'scenario_contact_light.json' },
     ],
   };
 

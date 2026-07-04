@@ -1,7 +1,7 @@
 {
   "_meta": {
     "experiment_id": "contact_friction",
-    "variant": "a",
+    "variant": "b",
     "scenario_version": "2026-07-04"
   },
   "root": {
@@ -112,16 +112,9 @@
     "next": "step3_contact"
   },
   "step3_contact": {
-    "message": "最後にご連絡先を教えてください。【ステップ3/3】",
+    "message": "最後にご連絡先を教えてください。【ステップ3/3】\nご希望の時間帯に担当スタッフが一度お電話します。しつこい営業のお電話は一切ありません。",
     "form_type": "multi_field",
     "fields": [
-      {
-        "field": "name",
-        "label": "お名前",
-        "type": "text",
-        "required": true,
-        "placeholder": "例：山田 太郎"
-      },
       {
         "field": "phone",
         "label": "お電話番号",
@@ -152,6 +145,13 @@
             "value": "いつでもOK"
           }
         ]
+      },
+      {
+        "field": "name",
+        "label": "お名前（任意）",
+        "type": "text",
+        "required": false,
+        "placeholder": "未入力でもOKです"
       }
     ],
     "next": "confirm"
