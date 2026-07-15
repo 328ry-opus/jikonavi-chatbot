@@ -1008,8 +1008,14 @@
         throw new Error('Submit failed');
       }
 
+      // Skip conversion tracking for blocklisted submissions (still shows success)
+      let result = null;
+      try { result = await response.json(); } catch (_) { result = null; }
+
       // GTM tracking: push event for form submission conversion (non-blocking)
-      try { window.dataLayer = window.dataLayer || []; window.dataLayer.push({ event: 'jn_chat_submit', jn_variant: state.abVariant }); } catch (_) {}
+      if (!result?.blocked) {
+        try { window.dataLayer = window.dataLayer || []; window.dataLayer.push({ event: 'jn_chat_submit', jn_variant: state.abVariant }); } catch (_) {}
+      }
 
       showScenarioNode('complete');
     } catch (err) {

@@ -47,6 +47,27 @@ function corsHeaders(origin: string) {
 
 const UNSUPPORTED_BROWSER_MESSAGE =
   "このブラウザからはチャット送信を受け付けていません。お手数ですが、お電話（0120-911-427）でご相談ください。";
+
+// Silent phone blocklist: known non-inquiry senders. Submissions are kept in
+// chat_messages for audit, but no patient record / no notification is created,
+// and the sender still sees the normal success screen.
+// Numbers live in the CHAT_FORM_BLOCKED_PHONES secret (comma-separated,
+// digits only) — never hardcode them here (this repo is public).
+const BLOCKED_PHONE_DIGITS = new Set(
+  (Deno.env.get("CHAT_FORM_BLOCKED_PHONES") || "")
+    .split(",")
+    .map((v) => v.replace(/\D/g, ""))
+    .filter(Boolean),
+);
+
+function normalizePhoneDigits(value: unknown): string {
+  return String(value ?? "")
+    .replace(
+      /[０-９]/g,
+      (c: string) => String.fromCharCode(c.charCodeAt(0) - 0xFEE0),
+    )
+    .replace(/\D/g, "");
+}
 const DB_RETRY_DELAY_MS = 700;
 type DbRetryResult = {
   error?: unknown | null;
@@ -288,6 +309,24 @@ serve(async (req) => {
       message_type: "form_submission",
     });
     if (msgError) console.error("Message insert error:", msgError.message);
+
+    // ── Silent phone blocklist ───────────────────────────
+    // Return the same success response the widget expects (it only checks
+    // response.ok), so the sender sees the normal completion screen.
+    if (BLOCKED_PHONE_DIGITS.has(normalizePhoneDigits(form_data.phone))) {
+      console.warn("Blocked chat-form submission (phone blocklist):", {
+        session_id,
+        phone: normalizePhoneDigits(form_data.phone),
+        page_url: page_url || "",
+      });
+      return new Response(
+        JSON.stringify({ success: true, patient_id: null, blocked: true }),
+        {
+          status: 200,
+          headers: { ...headers, "Content-Type": "application/json" },
+        },
+      );
+    }
 
     // ── Normalize area input ─────────────────────────────
     let area = (form_data.area || "").trim();
