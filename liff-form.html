@@ -271,10 +271,27 @@
       background-color: #fff;
     }
 
-    input[type="date"].form-control {
+    .date-shell {
+      display: flex;
+      align-items: center;
+      width: 100%;
       min-width: 0;
-      appearance: auto;
-      -webkit-appearance: auto;
+    }
+
+    /* iOS WebKit gives date inputs an intrinsic width; flex + min-width:0
+       is the same fix the chat widget uses (.jn-date-shell). */
+    .date-shell input[type="date"] {
+      flex: 1 1 auto;
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
+      appearance: none;
+      -webkit-appearance: none;
+    }
+
+    input.form-control,
+    select.form-control {
+      max-width: 100%;
     }
 
     .field-error {
@@ -457,8 +474,8 @@
     <form id="consultation-form" class="consultation-form" novalidate>
       <p class="form-intro"><span class="required-mark">*</span> は必須項目です。わかる範囲でご入力ください。</p>
 
-      <fieldset class="form-section">
-        <legend class="form-section__title"><span class="section-number">1</span>事故について</legend>
+      <section class="form-section">
+        <h2 class="form-section__title"><span class="section-number">1</span>事故について</h2>
 
         <div class="field-group" data-field-group="accident_situation">
           <p id="accident-situation-label" class="field-label">事故の状況 <span class="required-mark">*</span></p>
@@ -485,13 +502,13 @@
 
         <div class="field-group" data-field-group="accident_date">
           <label class="field-label" for="accident-date">事故にあった日 <span class="required-mark">*</span></label>
-          <input id="accident-date" class="form-control" type="date" name="accident_date" aria-describedby="accident-date-error" required>
+          <div class="date-shell"><input id="accident-date" class="form-control" type="date" name="accident_date" aria-describedby="accident-date-error" required></div>
           <p id="accident-date-error" class="field-error">事故にあった日を入力してください</p>
         </div>
-      </fieldset>
+      </section>
 
-      <fieldset class="form-section">
-        <legend class="form-section__title"><span class="section-number">2</span>症状・通院希望エリア</legend>
+      <section class="form-section">
+        <h2 class="form-section__title"><span class="section-number">2</span>症状・通院希望エリア</h2>
 
         <div class="field-group" data-field-group="symptoms">
           <p id="symptoms-label" class="field-label">症状を選んでください<span class="field-note">（複数選択OK）</span> <span class="required-mark">*</span></p>
@@ -584,10 +601,10 @@
           <input id="area" class="form-control" type="text" name="area" maxlength="100" placeholder="例：船橋市／名古屋駅" autocomplete="address-level2" aria-describedby="area-error" required>
           <p id="area-error" class="field-error">市区町村・最寄駅を入力してください</p>
         </div>
-      </fieldset>
+      </section>
 
-      <fieldset class="form-section">
-        <legend class="form-section__title"><span class="section-number">3</span>ご連絡先</legend>
+      <section class="form-section">
+        <h2 class="form-section__title"><span class="section-number">3</span>ご連絡先</h2>
 
         <div class="field-group" data-field-group="name">
           <label class="field-label" for="name">お名前 <span class="required-mark">*</span></label>
@@ -623,7 +640,7 @@
           </div>
           <p id="contact-time-error" class="field-error">ご希望の連絡時間帯を選択してください</p>
         </div>
-      </fieldset>
+      </section>
 
       <div class="submit-area">
         <button id="submit-button" class="submit-button" type="submit">相談内容を送信する</button>
