@@ -60,6 +60,60 @@ const BLOCKED_PHONE_DIGITS = new Set(
     .filter(Boolean),
 );
 
+const PREFECTURES = new Set<string>([
+  "北海道",
+  "青森県",
+  "岩手県",
+  "宮城県",
+  "秋田県",
+  "山形県",
+  "福島県",
+  "茨城県",
+  "栃木県",
+  "群馬県",
+  "埼玉県",
+  "千葉県",
+  "東京都",
+  "神奈川県",
+  "新潟県",
+  "富山県",
+  "石川県",
+  "福井県",
+  "山梨県",
+  "長野県",
+  "岐阜県",
+  "静岡県",
+  "愛知県",
+  "三重県",
+  "滋賀県",
+  "京都府",
+  "大阪府",
+  "兵庫県",
+  "奈良県",
+  "和歌山県",
+  "鳥取県",
+  "島根県",
+  "岡山県",
+  "広島県",
+  "山口県",
+  "徳島県",
+  "香川県",
+  "愛媛県",
+  "高知県",
+  "福岡県",
+  "佐賀県",
+  "長崎県",
+  "熊本県",
+  "大分県",
+  "宮崎県",
+  "鹿児島県",
+  "沖縄県",
+]);
+
+function validatePrefecture(value: unknown): string | null {
+  return typeof value === "string" && PREFECTURES.has(value) ? value : null;
+}
+
 function normalizePhoneDigits(value: unknown): string {
   return String(value ?? "")
     .replace(
@@ -273,6 +327,7 @@ serve(async (req) => {
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey);
+    const pref = validatePrefecture(form_data.pref);
 
     // Update session with form data
     const { error: sessionError } = await supabase.from("chat_sessions").upsert(
@@ -301,6 +356,7 @@ serve(async (req) => {
         accident_type: form_data.accident_type || "",
         name: form_data.name || "",
         phone: form_data.phone || "",
+        pref: pref || "",
         area: form_data.area || "",
         contact_time: form_data.contact_time || "",
         page_url: page_url || "",
@@ -329,10 +385,13 @@ serve(async (req) => {
     }
 
     // ── Normalize area input ─────────────────────────────
-    let area = (form_data.area || "").trim();
+    const rawArea = typeof form_data.area === "string" ? form_data.area : "";
+    // Trim always; the station-suffix heuristic below only applies to legacy
+    // submissions that lack a validated prefecture.
+    let area = rawArea.trim();
     // Add "駅" suffix if it looks like a station name without it
     if (
-      area && !area.endsWith("駅") && !area.endsWith("市") &&
+      !pref && area && !area.endsWith("駅") && !area.endsWith("市") &&
       !area.endsWith("区") && !area.endsWith("町") && !area.endsWith("村") &&
       !area.endsWith("県") && !area.endsWith("府") && !area.endsWith("都") &&
       !area.endsWith("道") && area.length <= 15
@@ -342,6 +401,7 @@ serve(async (req) => {
         area = area + "駅";
       }
     }
+    const address = pref ? pref + area : area;
 
     // ── Normalize phone number ──────────────────────────
     let phone = (form_data.phone || "").replace(
@@ -539,7 +599,7 @@ serve(async (req) => {
       symptoms ? `症状: ${symptoms}` : "",
       injuryStatus ? `けがの状況: ${injuryStatus}` : "",
       accidentDateNote,
-      area ? `希望エリア: ${area}` : "",
+      address ? `希望エリア: ${address}` : "",
       form_data.contact_time ? `連絡希望: ${form_data.contact_time}` : "",
       kanaPredicted ? `ふりがな「${nameKana}」はAI予測です（要確認）` : "",
     ].filter(Boolean).join("\n") + dupNote;
@@ -555,7 +615,9 @@ serve(async (req) => {
             name_kanji: nameKanjiFormatted || form_data.name || "",
             name_kana: nameKana,
             phone,
-            address: area,
+            pref,
+            area,
+            address,
             channel: "chat",
             status: "問合せ受付",
             staff: "ボット",
@@ -620,7 +682,7 @@ serve(async (req) => {
         source: "chatbot",
         name: form_data.name || "",
         phone,
-        area,
+        area: address,
         inquiry_type: form_data.inquiry_type || "",
         accident_type: accidentSituation,
         accident_date: accidentDate || rawAccidentDate || "",

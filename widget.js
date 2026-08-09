@@ -275,6 +275,10 @@
     }
     .jn-form-input:focus { border-color: ${CONFIG.brandColor}; }
     .jn-form-input::placeholder { color: #aaa; }
+    select.jn-form-input {
+      height: 40px; min-height: 40px; padding-right: 8px; background-color: #fff;
+      font-size: 16px; -webkit-appearance: menulist; appearance: auto;
+    }
     /* iOS Safari date input overflow fix */
     .jn-date-shell {
       display: flex; align-items: center; width: 100%; min-width: 0;
@@ -676,6 +680,27 @@
         formState[field.field] = '';
         textarea.addEventListener('input', () => { formState[field.field] = textarea.value; });
         group.appendChild(textarea);
+
+      } else if (field.type === 'select') {
+        const select = document.createElement('select');
+        select.className = 'jn-form-input';
+        select.required = !!field.required;
+
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = '選択してください';
+        select.appendChild(placeholder);
+
+        (field.options || []).forEach(opt => {
+          const option = document.createElement('option');
+          option.value = opt.value;
+          option.textContent = opt.label;
+          select.appendChild(option);
+        });
+
+        formState[field.field] = '';
+        select.addEventListener('change', () => { formState[field.field] = select.value; });
+        group.appendChild(select);
 
       } else if (field.type === 'text' || field.type === 'tel') {
         const input = document.createElement('input');
