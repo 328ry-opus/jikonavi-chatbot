@@ -286,15 +286,18 @@ async function notifyStaff(
   const webhookSecret = Deno.env.get("GAS_WEBHOOK_SECRET");
   if (!webhookUrl) return;
 
+  // source must be "line": the GAS notifier rejects unknown sources
+  // (fail-closed allowlist), and its LINE branch reads accident_type /
+  // accident_detail / contact_time for the mail body.
   const body = JSON.stringify({
-    source: "line-form",
+    source: "line",
     type: "new_patient",
     name: payload.name,
     phone: formattedPhone,
     area: address,
     accident_type: payload.accidentSituation,
     accident_date: payload.accidentDate,
-    symptoms: payload.symptoms.join("、"),
+    accident_detail: `症状: ${payload.symptoms.join("、")}`,
     contact_time: payload.contactTime,
     patient_id: patientId,
   });
