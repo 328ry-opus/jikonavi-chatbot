@@ -1,5 +1,8 @@
 # LIFF相談フォーム
 
+> **2026-08-10更新**: エンドポイントは **https://jiko-navi.jp/liff-form.html**（さくらサーバー・FTP配信）に変更済み。LIFF上部バーにjiko-navi.jpが表示される。**liff-form.htmlを変更したら `scripts/deploy-liff-form.sh` の実行が必要**（git pushだけでは本番に反映されない）。GitHub Pages側のコピーは残っているが本番導線からは未使用。
+> LIFF ID: `2011041230-1Cb2lg53`／チャネルID: `2011041230`（公開済み・2026-08-10）
+
 事故なびLINE公式アカウントのリッチメニューから開く相談フォームです。公開HTMLはGitHub Pages、送信処理はSupabase Edge Function `line-form` を使用します。
 
 ## LIFFアプリの設定
