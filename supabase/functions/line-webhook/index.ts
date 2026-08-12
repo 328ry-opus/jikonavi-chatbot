@@ -21,6 +21,12 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "Content-Type, X-Line-Signature",
 };
 
+// Keep in sync with SUBMIT_NOTICE_TEXT in liff-form.html. The LIFF form sends
+// this as the user's own message (liff.sendMessages) purely so the user shows
+// up in the OA Manager chat list; the patient is already registered by
+// line-form, so it must not reach extraction or patient notes.
+const FORM_SUBMIT_NOTICE_TEXT = "相談フォームを送信しました";
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: CORS_HEADERS });
@@ -94,6 +100,11 @@ serve(async (req) => {
       const timestamp = event.timestamp;
 
       if (!userId || !text) continue;
+
+      if (text.trim() === FORM_SUBMIT_NOTICE_TEXT) {
+        console.log(`Form-submit notice from ${userId}, skipping`);
+        continue;
+      }
 
       console.log(`LINE message from ${userId}: ${text.substring(0, 100)}`);
 

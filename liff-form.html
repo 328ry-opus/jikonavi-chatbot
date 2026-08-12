@@ -663,6 +663,9 @@
   <script>
     const LIFF_ID = '2011041230-1Cb2lg53';
     const SUBMIT_URL = 'https://dxbdqldfqlggsrpcjuwg.supabase.co/functions/v1/line-form';
+    // Keep in sync with FORM_SUBMIT_NOTICE_TEXT in
+    // supabase/functions/line-webhook/index.ts (the webhook skips this text).
+    const SUBMIT_NOTICE_TEXT = '相談フォームを送信しました';
 
     const form = document.getElementById('consultation-form');
     const submitButton = document.getElementById('submit-button');
@@ -711,6 +714,21 @@
     }
 
     window.addEventListener('DOMContentLoaded', initializeLiff);
+
+    // Send one message as the user into the 1-on-1 talk so they appear in the
+    // OA Manager chat list (form-only users never send anything otherwise).
+    // Requires the chat_message.write LIFF scope; fails silently outside LINE
+    // or when the user declined the permission.
+    function notifyTalkOnSubmit() {
+      try {
+        if (!window.liff?.isInClient?.()) return;
+        if (readLiffContext().type !== 'utou') return;
+        window.liff.sendMessages([{ type: 'text', text: SUBMIT_NOTICE_TEXT }])
+          .catch((error) => console.warn('liff.sendMessages failed:', error));
+      } catch (error) {
+        console.warn('liff.sendMessages unavailable:', error);
+      }
+    }
 
     function normalizePhoneDigits(value) {
       return value
@@ -811,6 +829,7 @@
           throw new Error('Submission failed');
         }
 
+        notifyTalkOnSubmit();
         form.hidden = true;
         completion.hidden = false;
         completion.focus();

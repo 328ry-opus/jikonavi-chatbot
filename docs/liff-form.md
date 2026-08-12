@@ -5,6 +5,14 @@
 
 事故なびLINE公式アカウントのリッチメニューから開く相談フォームです。公開HTMLはGitHub Pages、送信処理はSupabase Edge Function `line-form` を使用します。
 
+## トーク一覧に載せるための送信完了メッセージ（2026-08-12〜）
+
+フォームだけで完結するとユーザーが一度も発言せず、OA Managerのトーク一覧に出ない（＝こちらから手動チャットできない）。そのため送信成功時に `liff.sendMessages` で「相談フォームを送信しました」をユーザー本人の発言としてトークへ自動送信する。
+
+- **LIFFのスコープに `chat_message.write` が必要**（LINE Developersコンソール → ログインチャネル2011041230 → LIFFタブ → 相談フォーム）。スコープ追加後、既存ユーザーにも次回オープン時に同意画面が1回出る
+- 文言は `liff-form.html` の `SUBMIT_NOTICE_TEXT` と `line-webhook/index.ts` の `FORM_SUBMIT_NOTICE_TEXT` で完全一致させること。webhookはこの文言を患者情報抽出・患者メモ追記の対象から除外している
+- LINE外ブラウザ・グループトーク（context type が `utou` 以外）・ユーザーが権限を許可しなかった場合は送らずスキップ（フォーム送信自体は成功する）
+
 ## LIFFアプリの設定
 
 1. LINE Developersコンソールで、事故なびのLINE公式アカウントに紐づくLINE Loginチャネルを開きます。
