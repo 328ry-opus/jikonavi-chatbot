@@ -1,5 +1,5 @@
 export function normalizePhone(raw: string): string {
-  let phone = raw.replace(/[\s\-\u2010-\u2015\u2212\uFF0D]/g, "").replace(
+  let phone = raw.replace(/[\s\-‐-―−－]/g, "").replace(
     /[０-９]/g,
     (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0),
   );

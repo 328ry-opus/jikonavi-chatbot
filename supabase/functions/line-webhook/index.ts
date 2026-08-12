@@ -20,11 +20,12 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, X-Line-Signature",
 };
+const MAX_PAYLOAD_BYTES = 256 * 1024;
 
 // Keep in sync with SUBMIT_NOTICE_TEXT in liff-form.html. The LIFF form sends
 // this as the user's own message (liff.sendMessages) purely so the user shows
 // up in the OA Manager chat list; the patient is already registered by
-// line-form, so it must not reach extraction or patient notes.
+// line-form, so it must not reach extraction, guidance replies, or notes.
 const FORM_SUBMIT_NOTICE_TEXT = "相談フォームを送信しました";
 
 serve(async (req) => {
@@ -47,8 +48,27 @@ serve(async (req) => {
       throw new Error("LINE credentials not set");
     }
 
+    const contentLengthHeader = req.headers.get("content-length");
+    if (contentLengthHeader) {
+      const contentLength = Number(contentLengthHeader);
+      if (Number.isFinite(contentLength) && contentLength > MAX_PAYLOAD_BYTES) {
+        return new Response(JSON.stringify({ error: "Payload too large" }), {
+          status: 413,
+          headers,
+        });
+      }
+    }
+
     // ── Signature verification ──
     const body = await req.text();
+    const bodySize = new TextEncoder().encode(body).length;
+    if (bodySize > MAX_PAYLOAD_BYTES) {
+      return new Response(JSON.stringify({ error: "Payload too large" }), {
+        status: 413,
+        headers,
+      });
+    }
+
     const signature = req.headers.get("X-Line-Signature") || "";
     const key = await crypto.subtle.importKey(
       "raw",
@@ -102,11 +122,16 @@ serve(async (req) => {
       if (!userId || !text) continue;
 
       if (text.trim() === FORM_SUBMIT_NOTICE_TEXT) {
-        console.log(`Form-submit notice from ${userId}, skipping`);
+        console.log("Form-submit notice received, skipping", {
+          line_user_id: userId,
+        });
         continue;
       }
 
-      console.log(`LINE message from ${userId}: ${text.substring(0, 100)}`);
+      console.log("LINE message received:", {
+        line_user_id: userId,
+        text_length: text.length,
+      });
 
       // ── Atomic upsert: claim or get existing log for this user ──
       const { data: existing } = await supabase
@@ -119,30 +144,31 @@ serve(async (req) => {
 
       if (existing?.status === "registered") {
         // Already registered — append message to log AND to patient notes
-        const messages = [...(existing.messages || []), {
+        const lineMessage = {
           text,
           timestamp,
           role: "user",
-        }];
-        await supabase.from("line_message_log").update({
-          messages,
-          updated_at: new Date().toISOString(),
-        }).eq("id", existing.id);
+        };
+        const appended = await appendLineMessageToLog(supabase, existing.id, lineMessage);
+        if (!appended) continue;
 
         // Append to patient notes so staff can see follow-up messages
         if (existing.patient_id && text) {
           const jst = new Date(Date.now() + 9 * 60 * 60 * 1000);
           const timeStr = `${jst.getUTCMonth() + 1}/${jst.getUTCDate()} ${jst.toISOString().slice(11, 16)}`;
           const appendNote = `\n【LINE追加メッセージ ${timeStr}】${text}`;
-          const { data: patient } = await supabase
-            .from("patients")
-            .select("notes")
-            .eq("id", existing.patient_id)
-            .single();
-          if (patient) {
-            await supabase.from("patients").update({
-              notes: (patient.notes || "") + appendNote,
-            }).eq("id", existing.patient_id);
+          const { error: appendNoteError } = await supabase.rpc(
+            "append_patient_note",
+            {
+              p_patient_id: existing.patient_id,
+              p_note: appendNote,
+            },
+          );
+          if (appendNoteError) {
+            console.error(
+              `append_patient_note failed for patient ${existing.patient_id}:`,
+              appendNoteError.message,
+            );
           }
         }
 
@@ -162,15 +188,16 @@ serve(async (req) => {
 
       if (existing?.status === "collecting") {
         // Accumulating messages — add this one and re-evaluate
-        const messages = [...(existing.messages || []), {
+        const lineMessage = {
           text,
           timestamp,
           role: "user",
-        }];
-        await supabase.from("line_message_log").update({
-          messages,
-          updated_at: new Date().toISOString(),
-        }).eq("id", existing.id);
+        };
+        const appended = await appendLineMessageToLog(supabase, existing.id, lineMessage);
+        if (!appended) continue;
+        const messages = Array.isArray(appended.messages)
+          ? appended.messages
+          : [...(existing.messages || []), lineMessage];
 
         // Try to extract patient info from accumulated messages
         if (apiKey) {
@@ -238,6 +265,13 @@ serve(async (req) => {
         messages,
       }).select("id").single();
 
+      // First contact: guide to the LIFF form via reply message (free tier).
+      // Sent before the Gemini call so the reply token stays fresh; existing
+      // users (collecting/registered) are never nagged.
+      if (newLog && event.replyToken) {
+        await replyFormGuidance(channelAccessToken, event.replyToken);
+      }
+
       if (apiKey && newLog) {
         const result = await tryExtractPatientInfo(apiKey, text);
         if (
@@ -280,13 +314,32 @@ serve(async (req) => {
       headers,
     });
   } catch (err) {
-    console.error("LINE webhook error:", err);
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    console.error("LINE webhook error:", errorMessage);
     return new Response(JSON.stringify({ error: "Internal server error" }), {
       status: 500,
       headers,
     });
   }
 });
+
+async function appendLineMessageToLog(
+  supabase: any,
+  logId: string,
+  lineMessage: { text: string; timestamp: number; role: string },
+): Promise<any | null> {
+  const { data, error } = await supabase.rpc("append_to_array_column", {
+    p_table_name: "line_message_log",
+    p_row_id: logId,
+    p_array_column: "messages",
+    p_value: lineMessage,
+  });
+  if (error) {
+    console.error(`append_to_array_column failed for log ${logId}:`, error.message);
+    return null;
+  }
+  return data;
+}
 
 // ── Gemini: extract patient info from message(s) ──
 async function tryExtractPatientInfo(
@@ -334,7 +387,10 @@ ${sanitizedText}
     return result;
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : String(e);
-    console.error("Gemini parse failed:", errorMessage);
+    const safeMessage = errorMessage.startsWith("Invalid JSON:")
+      ? "Invalid JSON response"
+      : errorMessage;
+    console.error("Gemini parse failed:", safeMessage);
     return null;
   }
 }
@@ -379,7 +435,8 @@ async function registerPatient(
       }`;
     }
   } catch (e) {
-    console.error("Duplicate check failed:", e);
+    const errorMessage = e instanceof Error ? e.message : String(e);
+    console.error("Duplicate check failed:", errorMessage);
   }
 
   const notes = [
@@ -420,6 +477,98 @@ async function registerPatient(
   return patientId;
 }
 
+// ── Reply with LIFF form guidance (first contact only) ──
+// Buttons instead of raw URLs: bare links look like scam DMs (house rule).
+const FORM_GUIDANCE_FLEX = {
+  type: "flex",
+  altText: "事故なび｜無料相談のご案内",
+  contents: {
+    type: "bubble",
+    body: {
+      type: "box",
+      layout: "vertical",
+      spacing: "md",
+      contents: [
+        {
+          type: "text",
+          text: "メッセージありがとうございます😊",
+          weight: "bold",
+          size: "md",
+          wrap: true,
+        },
+        {
+          type: "text",
+          text: "ご相談は下のボタンのフォームからがかんたんです（入力は約2分）。",
+          size: "sm",
+          color: "#555555",
+          wrap: true,
+        },
+        {
+          type: "text",
+          text: "もちろん、このままメッセージでのご相談もOKです。担当者よりご返信いたします。",
+          size: "xs",
+          color: "#888888",
+          wrap: true,
+        },
+      ],
+    },
+    footer: {
+      type: "box",
+      layout: "vertical",
+      spacing: "sm",
+      contents: [
+        {
+          type: "button",
+          style: "primary",
+          color: "#1148c4",
+          height: "sm",
+          action: {
+            type: "uri",
+            label: "相談フォームを開く",
+            uri: "https://liff.line.me/2011041230-1Cb2lg53",
+          },
+        },
+        {
+          type: "button",
+          style: "secondary",
+          height: "sm",
+          action: {
+            type: "uri",
+            label: "電話で相談（24時間・無料）",
+            uri: "tel:0120911427",
+          },
+        },
+      ],
+    },
+  },
+};
+
+async function replyFormGuidance(
+  channelAccessToken: string,
+  replyToken: string,
+): Promise<void> {
+  try {
+    const res = await fetch("https://api.line.me/v2/bot/message/reply", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${channelAccessToken}`,
+      },
+      body: JSON.stringify({
+        replyToken,
+        messages: [FORM_GUIDANCE_FLEX],
+      }),
+    });
+    if (!res.ok) {
+      console.error("Form guidance reply failed:", res.status, await res.text());
+    }
+  } catch (e) {
+    // A failed reply must never break patient registration.
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("Form guidance reply error:", msg);
+  }
+}
+
 // ── Notify staff via GAS webhook ──
 async function notifyStaff(info: any, patientId: string) {
   const GAS_WEBHOOK_URL = Deno.env.get("GAS_NOTIFY_WEBHOOK_URL");
@@ -454,6 +603,7 @@ async function notifyStaff(info: any, patientId: string) {
       body: bodyStr,
     });
   } catch (e) {
-    console.error("GAS notification failed:", e);
+    const errorMessage = e instanceof Error ? e.message : String(e);
+    console.error("GAS notification failed:", errorMessage);
   }
 }
