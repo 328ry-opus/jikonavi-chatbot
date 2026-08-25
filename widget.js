@@ -386,10 +386,6 @@
     triggerWrap.hidden = Boolean(hasExternalMobileTrigger);
     triggerWrap.style.display = hasExternalMobileTrigger ? 'none' : '';
   }
-  syncExternalMobileTrigger();
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', syncExternalMobileTrigger, { once: true });
-  }
   window.addEventListener('resize', syncExternalMobileTrigger, { passive: true });
 
   // ── Helpers ─────────────────────────────────────────────
@@ -1103,6 +1099,64 @@
 
   // Expose global API so external buttons can open the chat
   window.jikonautoChat = { toggle, open: () => { if (!state.isOpen) toggle(); } };
+
+  // The current production HTML still has a two-column phone/LINE bar. Inject
+  // the compact chat slot from the widget so the overlap fix can ship without
+  // replacing every generated page. Renewed HTML already carries the marker,
+  // so the same widget remains compatible and never creates a duplicate.
+  function mountMobileBottomBarTrigger() {
+    const existing = document.querySelector('[data-mobile-chat-trigger]');
+    if (existing) {
+      existing.closest('.sp-bar')?.classList.add('jn-has-chat');
+      syncExternalMobileTrigger();
+      return;
+    }
+
+    const bar = document.querySelector('.sp-bar:not(.sp-bar--clinic)');
+    if (!bar) {
+      syncExternalMobileTrigger();
+      return;
+    }
+
+    if (!document.getElementById('jikonavi-chat-mobile-bar-style')) {
+      const style = document.createElement('style');
+      style.id = 'jikonavi-chat-mobile-bar-style';
+      style.textContent = `
+        @media (max-width: 480px) {
+          .sp-bar.jn-has-chat { grid-template-columns: 1fr 1fr 58px !important; }
+          .sp-bar .jn-mobile-bar-chat {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            gap: 2px; min-width: 44px; border: 0; border-radius: 10px; padding: 6px 3px;
+            color: #fff; background: #1653c7; font-family: inherit; font-weight: 900;
+            font-size: 10px; line-height: 1.25; cursor: pointer;
+          }
+          .sp-bar .jn-mobile-bar-chat svg {
+            width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 2;
+          }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
+    const button = document.createElement('button');
+    button.className = 'sp-chat jn-mobile-bar-chat';
+    button.type = 'button';
+    button.setAttribute('data-mobile-chat-trigger', '');
+    button.setAttribute('aria-label', 'チャットで相談する');
+    button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg><span>チャット</span>';
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      window.jikonautoChat.open();
+    });
+    bar.classList.add('jn-has-chat');
+    bar.appendChild(button);
+    syncExternalMobileTrigger();
+  }
+
+  mountMobileBottomBarTrigger();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', mountMobileBottomBarTrigger, { once: true });
+  }
 
   window.addEventListener('pagehide', () => {
     trackClose('pagehide');

@@ -22,7 +22,15 @@ test("site mobile bottom bar replaces only the floating trigger", () => {
   assert.match(source, /document\.querySelector\('\[data-mobile-chat-trigger\]'\)/u);
   assert.match(source, /triggerWrap\.hidden = Boolean\(hasExternalMobileTrigger\);/u);
   assert.match(source, /triggerWrap\.style\.display = hasExternalMobileTrigger \? 'none' : '';/u);
-  assert.match(source, /document\.addEventListener\('DOMContentLoaded', syncExternalMobileTrigger, \{ once: true \}\);/u);
+  assert.match(source, /document\.addEventListener\('DOMContentLoaded', mountMobileBottomBarTrigger, \{ once: true \}\);/u);
   assert.match(source, /window\.jikonautoChat = \{ toggle, open:/u);
   assert.doesNotMatch(source, /window_\.hidden = Boolean\(hasExternalMobileTrigger\)/u);
+});
+
+test("legacy two-column production bar receives one compact chat control", () => {
+  assert.match(source, /\.sp-bar:not\(\.sp-bar--clinic\)/u);
+  assert.match(source, /\.sp-bar\.jn-has-chat \{ grid-template-columns: 1fr 1fr 58px !important; \}/u);
+  assert.match(source, /button\.setAttribute\('data-mobile-chat-trigger', ''\);/u);
+  assert.match(source, /bar\.appendChild\(button\);/u);
+  assert.match(source, /if \(existing\) \{[\s\S]*?return;/u);
 });
