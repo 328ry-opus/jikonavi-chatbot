@@ -236,7 +236,12 @@
       }
       .jn-trigger-wrap { bottom: 95px; right: 16px; }
       .jn-trigger-wrap.open .jn-trigger { display: none; }
-      .jn-trigger-label { font-size: 12px; padding: 6px 12px 6px 10px; }
+      /* The sticky phone/LINE bar already explains the consultation actions.
+         Keep chat available without covering card CTAs on narrow screens. */
+      .jn-trigger-label { display: none; }
+      .jn-trigger { width: 56px; height: 56px; }
+      .jn-trigger svg { width: 26px; height: 26px; }
+      .jn-badge { width: 14px; height: 14px; }
       .jn-header-close { display: flex; align-items: center; justify-content: center; }
       .jn-input-area {
         padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
@@ -371,6 +376,21 @@
   const inputEl = container.querySelector('.jn-input');
   const sendBtn = container.querySelector('.jn-send-btn');
   const inputArea = container.querySelector('.jn-input-area');
+
+  // The renewed site provides chat inside its mobile bottom bar. Hide only the
+  // floating trigger when that external control exists; the full-screen chat
+  // window remains mounted and can still be opened through the global API.
+  function syncExternalMobileTrigger() {
+    const hasExternalMobileTrigger = window.innerWidth <= 480
+      && document.querySelector('[data-mobile-chat-trigger]');
+    triggerWrap.hidden = Boolean(hasExternalMobileTrigger);
+    triggerWrap.style.display = hasExternalMobileTrigger ? 'none' : '';
+  }
+  syncExternalMobileTrigger();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', syncExternalMobileTrigger, { once: true });
+  }
+  window.addEventListener('resize', syncExternalMobileTrigger, { passive: true });
 
   // ── Helpers ─────────────────────────────────────────────
   function scrollToBottom() {
