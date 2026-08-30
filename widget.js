@@ -1091,15 +1091,18 @@
     if (document.visibilityState === 'hidden') trackClose('pagehide');
   });
 
-  // Auto-open on mobile after 4 seconds (only once per session)
+  // Auto-open on mobile after 4 seconds (only once per session).
+  // Key renamed from 'jikonavi_auto_opened': the renewed site pre-sets the old
+  // key on every mobile page load to force opt-in, which silently disabled
+  // auto-open. The new key restores it without redeploying the site's HTML.
   if (window.innerWidth <= 480) {
     try {
-      if (!sessionStorage.getItem('jikonavi_auto_opened')) {
+      if (!sessionStorage.getItem('jn_auto_open_done')) {
         setTimeout(() => {
           if (!state.isOpen) {
             state.autoOpened = true;
             window.jikonautoChat.open();
-            sessionStorage.setItem('jikonavi_auto_opened', '1');
+            sessionStorage.setItem('jn_auto_open_done', '1');
           }
         }, 4000);
       }
