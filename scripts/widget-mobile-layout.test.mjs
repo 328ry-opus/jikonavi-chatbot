@@ -9,7 +9,6 @@ test("mobile chat trigger remains accessible without covering card CTA labels", 
   assert.match(mobileBlock, /\.jn-trigger-label \{ display: none; \}/u);
   assert.match(mobileBlock, /\.jn-trigger \{ width: 56px; height: 56px; \}/u);
   assert.match(mobileBlock, /\.jn-trigger svg \{ width: 26px; height: 26px; \}/u);
-  assert.ok(56 >= 44, "mobile trigger must retain a 44px touch target");
 });
 
 test("desktop trigger and label remain unchanged", () => {
