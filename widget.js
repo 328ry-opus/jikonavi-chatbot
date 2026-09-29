@@ -76,7 +76,7 @@
       animation: jn-labelSlideIn 0.6s ease 1s both;
     }
     .jn-trigger-wrap.open .jn-trigger-label { display: none; }
-    .jn-trigger-wrap.jn-label-off .jn-trigger-label { display: none; }
+    .jn-trigger-wrap.jn-peek-on { display: none !important; }
 
     .jn-trigger {
       width: 84px; height: 84px; border-radius: 50%;
@@ -1151,8 +1151,8 @@
     if (document.visibilityState === 'hidden') trackClose('pagehide');
   });
 
-  // Mobile: after 4 seconds (once per session) swap the trigger label for a small
-  // peek bubble above the floating trigger instead of opening the full-screen
+  // Mobile: after 4 seconds (once per session) replace the floating trigger with a
+  // small peek bubble above the bottom bar instead of opening the full-screen
   // chat, so the page the visitor is reading stays visible. Tapping it opens the chat.
   // (8/31 auto-open kept as a proactive nudge; 9/30 changed from full-screen to peek.)
   function mobileBarOffset() {
@@ -1170,8 +1170,7 @@
     peek.className = 'jn-peek';
     peek.setAttribute('role', 'dialog');
     peek.setAttribute('aria-label', 'チャットのご案内');
-    const triggerTop = triggerWrap.getBoundingClientRect().top;
-    peek.style.bottom = `${Math.max(96, window.innerHeight - triggerTop + 10)}px`;
+    peek.style.bottom = `calc(${mobileBarOffset()}px + env(safe-area-inset-bottom, 0px))`;
     peek.innerHTML = `
       <p class="jn-peek-text"><span>交通事故のご相談を、</span><span>24時間365日</span><span>チャットで</span><span>受け付けています。</span></p>
       <button type="button" class="jn-peek-open">チャットで相談する</button>
@@ -1182,7 +1181,7 @@
     const remove = () => {
       peek.remove();
       clearTimeout(hideTimer);
-      triggerWrap.classList.remove('jn-label-off');
+      triggerWrap.classList.remove('jn-peek-on');
     };
     hideTimer = setTimeout(remove, 15000);
     peek.querySelector('.jn-peek-open').addEventListener('click', () => {
@@ -1191,7 +1190,7 @@
       window.jikonautoChat.open();
     });
     peek.querySelector('.jn-peek-close').addEventListener('click', remove);
-    triggerWrap.classList.add('jn-label-off');
+    triggerWrap.classList.add('jn-peek-on');
     container.appendChild(peek);
     if (window.dataLayer) window.dataLayer.push({ event: 'jn_chat_peek_shown' });
   }

@@ -7,7 +7,7 @@ const mobileBlock = source.match(/@media \(max-width: 480px\) \{(?<body>[\s\S]*?
 
 test("mobile chat trigger shows a compact label like desktop", () => {
   assert.match(mobileBlock, /\.jn-trigger-label \{\s*font-size: 13px;/u);
-  assert.match(source, /\.jn-trigger-wrap\.jn-label-off \.jn-trigger-label \{ display: none; \}/u);
+  assert.match(source, /\.jn-trigger-wrap\.jn-peek-on \{ display: none !important; \}/u);
   assert.match(mobileBlock, /\.jn-trigger \{ width: 56px; height: 56px; \}/u);
   assert.match(mobileBlock, /\.jn-trigger svg \{ width: 26px; height: 26px; \}/u);
 });
