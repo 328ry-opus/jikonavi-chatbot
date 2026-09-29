@@ -228,6 +228,26 @@
     .jn-header-close svg { width: 20px; height: 20px; }
 
     /* Mobile */
+    .jn-peek {
+      position: fixed; left: 12px; right: 12px; z-index: 99997;
+      display: grid; gap: 10px; align-items: center;
+      padding: 14px 44px 14px 16px; background: #fff; color: #101b3a;
+      border: 1px solid #dfe6f5; border-radius: 14px; box-shadow: 0 10px 30px rgba(16,27,58,0.18);
+      font-family: inherit; animation: jn-peek-in .25s ease-out;
+    }
+    .jn-peek-text { margin: 0; font-size: 14px; line-height: 1.6; font-weight: 700; }
+    .jn-peek-open {
+      justify-self: start; border: 0; border-radius: 999px; cursor: pointer;
+      padding: 10px 18px; font: inherit; font-size: 14px; font-weight: 700; color: #fff; background: #1148c4;
+    }
+    .jn-peek-close {
+      position: absolute; top: 8px; right: 8px; width: 32px; height: 32px; border: 0; border-radius: 50%;
+      background: transparent; color: #4a5575; cursor: pointer; display: grid; place-items: center;
+    }
+    .jn-peek-close svg { width: 18px; height: 18px; }
+    @keyframes jn-peek-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+    @media (prefers-reduced-motion: reduce) { .jn-peek { animation: none; } }
+
     @media (max-width: 480px) {
       .jn-window {
         bottom: 0; right: 0; left: 0; top: 0;
@@ -1165,17 +1185,51 @@
     if (document.visibilityState === 'hidden') trackClose('pagehide');
   });
 
-  // Auto-open on mobile after 4 seconds (only once per session).
-  // Key renamed from 'jikonavi_auto_opened': the renewed site pre-sets the old
-  // key on every mobile page load to force opt-in, which silently disabled
-  // auto-open. The new key restores it without redeploying the site's HTML.
+  // Mobile: after 4 seconds (once per session) show a small peek bubble above
+  // the bottom bar instead of opening the full-screen chat, so the page the
+  // visitor is reading stays visible. Tapping it opens the chat.
+  // (8/31 auto-open kept as a proactive nudge; 9/30 changed from full-screen to peek.)
+  function mobileBarOffset() {
+    let el = document.querySelector('[data-mobile-chat-trigger]');
+    while (el && el !== document.body) {
+      if (getComputedStyle(el).position === 'fixed') return el.getBoundingClientRect().height + 12;
+      el = el.parentElement;
+    }
+    return 96;
+  }
+
+  function showPeek() {
+    if (state.isOpen || container.querySelector('.jn-peek')) return;
+    const peek = document.createElement('div');
+    peek.className = 'jn-peek';
+    peek.setAttribute('role', 'dialog');
+    peek.setAttribute('aria-label', 'チャットのご案内');
+    peek.style.bottom = `calc(${mobileBarOffset()}px + env(safe-area-inset-bottom, 0px))`;
+    peek.innerHTML = `
+      <p class="jn-peek-text">交通事故のご相談を、24時間365日チャットで受け付けています。</p>
+      <button type="button" class="jn-peek-open">チャットで相談する</button>
+      <button type="button" class="jn-peek-close" aria-label="閉じる">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>`;
+    let hideTimer;
+    const remove = () => { peek.remove(); clearTimeout(hideTimer); };
+    hideTimer = setTimeout(remove, 15000);
+    peek.querySelector('.jn-peek-open').addEventListener('click', () => {
+      remove();
+      state.autoOpened = true;
+      window.jikonautoChat.open();
+    });
+    peek.querySelector('.jn-peek-close').addEventListener('click', remove);
+    container.appendChild(peek);
+    if (window.dataLayer) window.dataLayer.push({ event: 'jn_chat_peek_shown' });
+  }
+
   if (window.innerWidth <= 480) {
     try {
       if (!sessionStorage.getItem('jn_auto_open_done')) {
         setTimeout(() => {
           if (!state.isOpen) {
-            state.autoOpened = true;
-            window.jikonautoChat.open();
+            showPeek();
             sessionStorage.setItem('jn_auto_open_done', '1');
           }
         }, 4000);

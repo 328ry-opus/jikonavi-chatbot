@@ -33,3 +33,11 @@ test("legacy two-column production bar receives one compact chat control", () =>
   assert.match(source, /bar\.appendChild\(button\);/u);
   assert.match(source, /if \(existing\) \{[\s\S]*?return;/u);
 });
+
+test("mobile auto nudge shows a small peek instead of opening the full-screen chat", () => {
+  const block = source.slice(source.indexOf("if (window.innerWidth <= 480) {\n    try {"), source.indexOf("// ── Init"));
+  assert.match(block, /showPeek\(\);/u);
+  assert.doesNotMatch(block, /window\.jikonautoChat\.open\(\)/u);
+  assert.match(source, /container\.appendChild\(peek\);/u);
+  assert.match(source, /\.jn-peek \{[\s\S]*?position: fixed;/u);
+});
