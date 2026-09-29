@@ -5,8 +5,9 @@ import test from "node:test";
 const source = await readFile(new URL("../widget.js", import.meta.url), "utf8");
 const mobileBlock = source.match(/@media \(max-width: 480px\) \{(?<body>[\s\S]*?)\n    \}\n\n    \/\* Multi-field form \*\//u)?.groups?.body ?? "";
 
-test("mobile chat trigger remains accessible without covering card CTA labels", () => {
-  assert.match(mobileBlock, /\.jn-trigger-label \{ display: none; \}/u);
+test("mobile chat trigger shows a compact label like desktop", () => {
+  assert.match(mobileBlock, /\.jn-trigger-label \{\s*font-size: 13px;/u);
+  assert.match(source, /\.jn-trigger-wrap\.jn-label-off \.jn-trigger-label \{ display: none; \}/u);
   assert.match(mobileBlock, /\.jn-trigger \{ width: 56px; height: 56px; \}/u);
   assert.match(mobileBlock, /\.jn-trigger svg \{ width: 26px; height: 26px; \}/u);
 });
@@ -17,13 +18,12 @@ test("desktop trigger and label remain unchanged", () => {
   assert.match(desktopSource, /\.jn-trigger \{[\s\S]*?width: 84px; height: 84px;/u);
 });
 
-test("site mobile bottom bar replaces only the floating trigger", () => {
+test("mobile floating trigger stays visible above the site bottom bar", () => {
   assert.match(source, /document\.querySelector\('\[data-mobile-chat-trigger\]'\)/u);
-  assert.match(source, /triggerWrap\.hidden = Boolean\(hasExternalMobileTrigger\);/u);
-  assert.match(source, /triggerWrap\.style\.display = hasExternalMobileTrigger \? 'none' : '';/u);
+  assert.match(source, /triggerWrap\.hidden = false;/u);
+  assert.match(source, /triggerWrap\.style\.bottom = window\.innerWidth <= 480/u);
   assert.match(source, /document\.addEventListener\('DOMContentLoaded', mountMobileBottomBarTrigger, \{ once: true \}\);/u);
   assert.match(source, /window\.jikonautoChat = \{ toggle, open:/u);
-  assert.doesNotMatch(source, /window_\.hidden = Boolean\(hasExternalMobileTrigger\)/u);
 });
 
 test("legacy two-column production bar receives one compact chat control", () => {

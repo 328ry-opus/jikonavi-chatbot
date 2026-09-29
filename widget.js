@@ -76,6 +76,7 @@
       animation: jn-labelSlideIn 0.6s ease 1s both;
     }
     .jn-trigger-wrap.open .jn-trigger-label { display: none; }
+    .jn-trigger-wrap.jn-label-off .jn-trigger-label { display: none; }
 
     .jn-trigger {
       width: 84px; height: 84px; border-radius: 50%;
@@ -256,9 +257,9 @@
       }
       .jn-trigger-wrap { bottom: 95px; right: 16px; }
       .jn-trigger-wrap.open .jn-trigger { display: none; }
-      /* The sticky phone/LINE bar already explains the consultation actions.
-         Keep chat available without covering card CTAs on narrow screens. */
-      .jn-trigger-label { display: none; }
+      .jn-trigger-label {
+        font-size: 13px; padding: 8px 20px 8px 12px; margin-right: -10px; border-radius: 18px;
+      }
       .jn-trigger { width: 56px; height: 56px; }
       .jn-trigger svg { width: 26px; height: 26px; }
       .jn-badge { width: 14px; height: 14px; }
@@ -397,14 +398,14 @@
   const sendBtn = container.querySelector('.jn-send-btn');
   const inputArea = container.querySelector('.jn-input-area');
 
-  // The renewed site provides chat inside its mobile bottom bar. Hide only the
-  // floating trigger when that external control exists; the full-screen chat
-  // window remains mounted and can still be opened through the global API.
+  // Mobile keeps the floating trigger and its label, same as desktop (9/30),
+  // lifted just above the site's bottom phone/LINE bar when that bar exists.
   function syncExternalMobileTrigger() {
-    const hasExternalMobileTrigger = window.innerWidth <= 480
-      && document.querySelector('[data-mobile-chat-trigger]');
-    triggerWrap.hidden = Boolean(hasExternalMobileTrigger);
-    triggerWrap.style.display = hasExternalMobileTrigger ? 'none' : '';
+    triggerWrap.hidden = false;
+    triggerWrap.style.display = '';
+    triggerWrap.style.bottom = window.innerWidth <= 480
+      ? `calc(${mobileBarOffset()}px + env(safe-area-inset-bottom, 0px))`
+      : '';
   }
   window.addEventListener('resize', syncExternalMobileTrigger, { passive: true });
 
@@ -1185,9 +1186,9 @@
     if (document.visibilityState === 'hidden') trackClose('pagehide');
   });
 
-  // Mobile: after 4 seconds (once per session) show a small peek bubble above
-  // the bottom bar instead of opening the full-screen chat, so the page the
-  // visitor is reading stays visible. Tapping it opens the chat.
+  // Mobile: after 4 seconds (once per session) swap the trigger label for a small
+  // peek bubble above the floating trigger instead of opening the full-screen
+  // chat, so the page the visitor is reading stays visible. Tapping it opens the chat.
   // (8/31 auto-open kept as a proactive nudge; 9/30 changed from full-screen to peek.)
   function mobileBarOffset() {
     let el = document.querySelector('[data-mobile-chat-trigger]');
@@ -1204,7 +1205,8 @@
     peek.className = 'jn-peek';
     peek.setAttribute('role', 'dialog');
     peek.setAttribute('aria-label', 'チャットのご案内');
-    peek.style.bottom = `calc(${mobileBarOffset()}px + env(safe-area-inset-bottom, 0px))`;
+    const triggerTop = triggerWrap.getBoundingClientRect().top;
+    peek.style.bottom = `${Math.max(96, window.innerHeight - triggerTop + 10)}px`;
     peek.innerHTML = `
       <p class="jn-peek-text">交通事故のご相談を、24時間365日チャットで受け付けています。</p>
       <button type="button" class="jn-peek-open">チャットで相談する</button>
@@ -1212,7 +1214,11 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
       </button>`;
     let hideTimer;
-    const remove = () => { peek.remove(); clearTimeout(hideTimer); };
+    const remove = () => {
+      peek.remove();
+      clearTimeout(hideTimer);
+      triggerWrap.classList.remove('jn-label-off');
+    };
     hideTimer = setTimeout(remove, 15000);
     peek.querySelector('.jn-peek-open').addEventListener('click', () => {
       remove();
@@ -1220,6 +1226,7 @@
       window.jikonautoChat.open();
     });
     peek.querySelector('.jn-peek-close').addEventListener('click', remove);
+    triggerWrap.classList.add('jn-label-off');
     container.appendChild(peek);
     if (window.dataLayer) window.dataLayer.push({ event: 'jn_chat_peek_shown' });
   }
