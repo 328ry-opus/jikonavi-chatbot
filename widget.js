@@ -11,7 +11,7 @@
     edgeFunctionUrl: 'https://dxbdqldfqlggsrpcjuwg.supabase.co/functions/v1/chat',
     trackUrl: 'https://dxbdqldfqlggsrpcjuwg.supabase.co/functions/v1/chat-track',
     supabaseAnonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4YmRxbGRmcWxnZ3NycGNqdXdnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2ODczNDgsImV4cCI6MjA4ODI2MzM0OH0.19yhx6Emt3xD4h5goRRQf5Ga4rom3cSur1G5ZRY_FMs',
-    brandColor: '#1a5995',
+    brandColor: '#1148c4', // same blue as the site (aoi)
     accentColor: '#027c96',
     widgetWidth: 380,
     widgetHeight: 640,
@@ -240,7 +240,7 @@
     .jn-peek-text span { display: inline-block; white-space: nowrap; }
     .jn-peek-open {
       justify-self: start; border: 0; border-radius: 999px; cursor: pointer;
-      padding: 10px 18px; font: inherit; font-size: 14px; font-weight: 700; color: #fff; background: #1148c4;
+      padding: 10px 18px; font: inherit; font-size: 14px; font-weight: 700; color: #fff; background: ${CONFIG.brandColor};
     }
     .jn-peek-close {
       position: absolute; top: 8px; right: 8px; width: 32px; height: 32px; border: 0; border-radius: 50%;
