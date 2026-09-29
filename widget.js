@@ -237,6 +237,7 @@
       font-family: inherit; animation: jn-peek-in .25s ease-out;
     }
     .jn-peek-text { margin: 0; font-size: 14px; line-height: 1.6; font-weight: 700; }
+    .jn-peek-text span { display: inline-block; white-space: nowrap; }
     .jn-peek-open {
       justify-self: start; border: 0; border-radius: 999px; cursor: pointer;
       padding: 10px 18px; font: inherit; font-size: 14px; font-weight: 700; color: #fff; background: #1148c4;
@@ -1121,56 +1122,20 @@
   // Expose global API so external buttons can open the chat
   window.jikonautoChat = { toggle, open: () => { if (!state.isOpen) toggle(); } };
 
-  // The current production HTML still has a two-column phone/LINE bar. Inject
-  // the compact chat slot from the widget so the overlap fix can ship without
-  // replacing every generated page. Renewed HTML already carries the marker,
-  // so the same widget remains compatible and never creates a duplicate.
+  // Mobile chat entry is the floating trigger (9/30). Hide the chat slot that the
+  // site's bottom bar carries and return the bar to the phone/LINE two columns.
   function mountMobileBottomBarTrigger() {
-    const existing = document.querySelector('[data-mobile-chat-trigger]');
-    if (existing) {
-      existing.closest('.sp-bar')?.classList.add('jn-has-chat');
-      syncExternalMobileTrigger();
-      return;
-    }
-
-    const bar = document.querySelector('.sp-bar:not(.sp-bar--clinic)');
-    if (!bar) {
-      syncExternalMobileTrigger();
-      return;
-    }
-
     if (!document.getElementById('jikonavi-chat-mobile-bar-style')) {
       const style = document.createElement('style');
       style.id = 'jikonavi-chat-mobile-bar-style';
       style.textContent = `
         @media (max-width: 480px) {
-          .sp-bar.jn-has-chat { grid-template-columns: 1fr 1fr 58px !important; }
-          .sp-bar .jn-mobile-bar-chat {
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            gap: 2px; min-width: 44px; border: 0; border-radius: 10px; padding: 6px 3px;
-            color: #fff; background: #1653c7; font-family: inherit; font-weight: 900;
-            font-size: 10px; line-height: 1.25; cursor: pointer;
-          }
-          .sp-bar .jn-mobile-bar-chat svg {
-            width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 2;
-          }
+          .sp-bar [data-mobile-chat-trigger] { display: none !important; }
+          .sp-bar:not(.sp-bar--clinic) { grid-template-columns: 1fr 1fr !important; }
         }
       `;
-      document.head.appendChild(style);
+      (document.head || document.documentElement).appendChild(style);
     }
-
-    const button = document.createElement('button');
-    button.className = 'sp-chat jn-mobile-bar-chat';
-    button.type = 'button';
-    button.setAttribute('data-mobile-chat-trigger', '');
-    button.setAttribute('aria-label', 'チャットで相談する');
-    button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg><span>チャット</span>';
-    button.addEventListener('click', (event) => {
-      event.preventDefault();
-      window.jikonautoChat.open();
-    });
-    bar.classList.add('jn-has-chat');
-    bar.appendChild(button);
     syncExternalMobileTrigger();
   }
 
@@ -1191,7 +1156,7 @@
   // chat, so the page the visitor is reading stays visible. Tapping it opens the chat.
   // (8/31 auto-open kept as a proactive nudge; 9/30 changed from full-screen to peek.)
   function mobileBarOffset() {
-    let el = document.querySelector('[data-mobile-chat-trigger]');
+    let el = document.querySelector('.sp-bar') || document.querySelector('[data-mobile-chat-trigger]');
     while (el && el !== document.body) {
       if (getComputedStyle(el).position === 'fixed') return el.getBoundingClientRect().height + 12;
       el = el.parentElement;
@@ -1208,7 +1173,7 @@
     const triggerTop = triggerWrap.getBoundingClientRect().top;
     peek.style.bottom = `${Math.max(96, window.innerHeight - triggerTop + 10)}px`;
     peek.innerHTML = `
-      <p class="jn-peek-text">交通事故のご相談を、24時間365日チャットで受け付けています。</p>
+      <p class="jn-peek-text"><span>交通事故のご相談を、</span><span>24時間365日</span><span>チャットで</span><span>受け付けています。</span></p>
       <button type="button" class="jn-peek-open">チャットで相談する</button>
       <button type="button" class="jn-peek-close" aria-label="閉じる">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>

@@ -26,12 +26,10 @@ test("mobile floating trigger stays visible above the site bottom bar", () => {
   assert.match(source, /window\.jikonautoChat = \{ toggle, open:/u);
 });
 
-test("legacy two-column production bar receives one compact chat control", () => {
-  assert.match(source, /\.sp-bar:not\(\.sp-bar--clinic\)/u);
-  assert.match(source, /\.sp-bar\.jn-has-chat \{ grid-template-columns: 1fr 1fr 58px !important; \}/u);
-  assert.match(source, /button\.setAttribute\('data-mobile-chat-trigger', ''\);/u);
-  assert.match(source, /bar\.appendChild\(button\);/u);
-  assert.match(source, /if \(existing\) \{[\s\S]*?return;/u);
+test("site bottom bar drops its chat slot on mobile and returns to two columns", () => {
+  assert.match(source, /\.sp-bar \[data-mobile-chat-trigger\] \{ display: none !important; \}/u);
+  assert.match(source, /\.sp-bar:not\(\.sp-bar--clinic\) \{ grid-template-columns: 1fr 1fr !important; \}/u);
+  assert.doesNotMatch(source, /bar\.appendChild\(button\);/u);
 });
 
 test("mobile auto nudge shows a small peek instead of opening the full-screen chat", () => {
