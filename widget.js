@@ -76,6 +76,10 @@
       animation: jn-labelSlideIn 0.6s ease 1s both;
     }
     .jn-trigger-wrap.open .jn-trigger-label { display: none; }
+    /* Tablet and small PC: the label covers page content, so show the round button only (2026-10-19) */
+    @media (min-width: 481px) and (max-width: 1199px) { .jn-trigger-label { display: none; } }
+    /* Pages that set <meta name="jikonavi-chat-label" content="off"> (forms) show the round button only */
+    .jn-trigger-wrap.jn-no-label .jn-trigger-label { display: none; }
     .jn-trigger-wrap.jn-peek-on { display: none !important; }
 
     .jn-trigger {
@@ -389,6 +393,8 @@
 
   // ── Element refs ────────────────────────────────────────
   const triggerWrap = container.querySelector('.jn-trigger-wrap');
+  const labelOff = document.querySelector('meta[name="jikonavi-chat-label"][content="off"]') !== null;
+  if (labelOff) triggerWrap.classList.add('jn-no-label');
   const trigger = container.querySelector('.jn-trigger');
   const badge = container.querySelector('.jn-badge');
   const window_ = container.querySelector('.jn-window');
@@ -1165,7 +1171,7 @@
   }
 
   function showPeek() {
-    if (state.isOpen || container.querySelector('.jn-peek')) return;
+    if (labelOff || state.isOpen || container.querySelector('.jn-peek')) return;
     const peek = document.createElement('div');
     peek.className = 'jn-peek';
     peek.setAttribute('role', 'dialog');
@@ -1195,7 +1201,8 @@
     if (window.dataLayer) window.dataLayer.push({ event: 'jn_chat_peek_shown' });
   }
 
-  if (window.innerWidth <= 480) {
+  // Form pages skip the peek without using up the once-per-session flag
+  if (window.innerWidth <= 480 && !labelOff) {
     try {
       if (!sessionStorage.getItem('jn_auto_open_done')) {
         setTimeout(() => {
