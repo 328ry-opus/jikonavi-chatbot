@@ -1201,7 +1201,8 @@
     if (window.dataLayer) window.dataLayer.push({ event: 'jn_chat_peek_shown' });
   }
 
-  if (window.innerWidth <= 480) {
+  // Form pages skip the peek without using up the once-per-session flag
+  if (window.innerWidth <= 480 && !labelOff) {
     try {
       if (!sessionStorage.getItem('jn_auto_open_done')) {
         setTimeout(() => {
