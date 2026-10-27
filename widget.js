@@ -1201,13 +1201,19 @@
     if (window.dataLayer) window.dataLayer.push({ event: 'jn_chat_peek_shown' });
   }
 
-  // Form pages skip the peek without using up the once-per-session flag
+  // Mobile: open the full-screen chat 4 seconds after landing (once per session).
+  // 10/27 restored from the 9/30 peek: chat leads from ads fell from 94 (Sep) to 10 (Oct 1-25)
+  // right after the peek replaced the auto-open. showPeek() above is kept for a later A/B test.
+  // Form pages skip it without using up the once-per-session flag.
   if (window.innerWidth <= 480 && !labelOff) {
     try {
       if (!sessionStorage.getItem('jn_auto_open_done')) {
         setTimeout(() => {
-          if (!state.isOpen) {
-            showPeek();
+          // A site dialog (e.g. a one-time notice) is open: do not stack the chat on it,
+          // and keep the once-per-session flag so the next page can still open the chat.
+          if (!state.isOpen && !document.querySelector('dialog[open]')) {
+            state.autoOpened = true;
+            window.jikonautoChat.open();
             sessionStorage.setItem('jn_auto_open_done', '1');
           }
         }, 4000);

@@ -32,10 +32,17 @@ test("site bottom bar drops its chat slot on mobile and returns to two columns",
   assert.doesNotMatch(source, /bar\.appendChild\(button\);/u);
 });
 
-test("mobile auto nudge shows a small peek instead of opening the full-screen chat", () => {
-  const block = source.slice(source.indexOf("if (window.innerWidth <= 480) {\n    try {"), source.indexOf("// ── Init"));
-  assert.match(block, /showPeek\(\);/u);
-  assert.doesNotMatch(block, /window\.jikonautoChat\.open\(\)/u);
-  assert.match(source, /container\.appendChild\(peek\);/u);
-  assert.match(source, /\.jn-peek \{[\s\S]*?position: fixed;/u);
+test("mobile opens the full-screen chat 4 seconds after landing, once per session", () => {
+  const block = source.slice(source.indexOf("if (window.innerWidth <= 480 && !labelOff) {"), source.indexOf("// ── Init"));
+  assert.ok(block.length > 0);
+  assert.match(block, /state\.autoOpened = true;\s*window\.jikonautoChat\.open\(\);/u);
+  assert.match(block, /sessionStorage\.setItem\('jn_auto_open_done', '1'\);/u);
+  assert.match(block, /\}, 4000\);/u);
+  assert.doesNotMatch(block, /showPeek\(\);/u);
+  assert.match(block, /!document\.querySelector\('dialog\[open\]'\)/u);
+});
+
+test("form pages that set the label-off meta never auto-open", () => {
+  assert.match(source, /const labelOff = document\.querySelector\('meta\[name="jikonavi-chat-label"\]\[content="off"\]'\) !== null;/u);
+  assert.match(source, /if \(window\.innerWidth <= 480 && !labelOff\) \{/u);
 });
