@@ -9,6 +9,7 @@ import {
 } from "https://esm.sh/@supabase/supabase-js@2";
 
 import { generateHmacSignature } from "../_shared/auth-utils.ts";
+import { FORM_SUBMIT_LIMITS, isOverEntryLimit } from "../_shared/public-entry-guard.ts";
 import {
   cleanPatientName,
   resolveNameKana,
@@ -412,6 +413,23 @@ serve(async (request) => {
   }
 
   const supabase = createClient(supabaseUrl, supabaseKey);
+  const overLimit = await isOverEntryLimit({
+    consume: (args) => supabase.rpc("consume_public_entry_limit", args),
+    req: request,
+    scope: "line_form",
+    limits: FORM_SUBMIT_LIMITS,
+    pepper: supabaseKey,
+    whenUnavailable: "allow",
+  });
+  if (overLimit) {
+    // The form answers any failure with its "try again or call us" message.
+    return jsonResponse(
+      { success: false, error: "Too many requests" },
+      429,
+      headers,
+    );
+  }
+
   const formattedPhone = normalizePhone(payload.phoneDigits);
   const address = payload.pref + payload.area;
   const geminiApiKey = Deno.env.get("GEMINI_API_KEY") || "";

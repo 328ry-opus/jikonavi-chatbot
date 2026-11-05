@@ -4,6 +4,14 @@
  */
 import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  EntryBodyError,
+  FORM_SUBMIT_LIMITS,
+  isOverEntryLimit,
+  isValidSessionId,
+  readEntryJson,
+  sanitizeFormData,
+} from "../_shared/public-entry-guard.ts";
 
 // ── CORS ──────────────────────────────────────────────────
 const ALLOWED_ORIGINS = [
@@ -278,10 +286,10 @@ serve(async (req) => {
   }
 
   try {
-    const body = await req.json();
+    const body = await readEntryJson(req);
     const {
       session_id,
-      form_data,
+      form_data: rawFormData,
       variant,
       experiment_id,
       scenario_version,
@@ -290,7 +298,8 @@ serve(async (req) => {
       device_type,
     } = body;
 
-    if (!session_id || !form_data) {
+    const form_data = sanitizeFormData(rawFormData);
+    if (!isValidSessionId(session_id) || !form_data) {
       return new Response(
         JSON.stringify({ error: "session_id and form_data are required" }),
         {
@@ -300,7 +309,7 @@ serve(async (req) => {
       );
     }
 
-    if (isNintendoSwitchBrowser(requestUserAgent, user_agent)) {
+    if (isNintendoSwitchBrowser(requestUserAgent, typeof user_agent === "string" ? user_agent : null)) {
       console.warn("Blocked chat-form submission from unsupported browser:", {
         session_id,
         user_agent: requestUserAgent.slice(0, 160),
@@ -327,6 +336,24 @@ serve(async (req) => {
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey);
+    const overLimit = await isOverEntryLimit({
+      consume: (args) => supabase.rpc("consume_public_entry_limit", args),
+      req,
+      scope: "chat_form",
+      limits: FORM_SUBMIT_LIMITS,
+      pepper: supabaseKey,
+      whenUnavailable: "allow",
+    });
+    if (overLimit) {
+      // The widget answers any non-2xx response with its phone guidance.
+      return new Response(
+        JSON.stringify({ success: false, code: "rate_limited" }),
+        {
+          status: 429,
+          headers: { ...headers, "Content-Type": "application/json" },
+        },
+      );
+    }
     const pref = validatePrefecture(form_data.pref);
 
     // Update session with form data
@@ -742,6 +769,15 @@ serve(async (req) => {
       },
     );
   } catch (err) {
+    if (err instanceof EntryBodyError) {
+      return new Response(
+        JSON.stringify({ error: err.message }),
+        {
+          status: err.status,
+          headers: { ...headers, "Content-Type": "application/json" },
+        },
+      );
+    }
     console.error("Chat form error:", err);
     return new Response(
       JSON.stringify({ error: "Internal server error" }),
