@@ -358,6 +358,11 @@
       display: block;
     }
 
+    .submit-help {
+      margin-top: 12px;
+      text-align: center;
+    }
+
     .privacy-note {
       margin: 12px 0 0;
       color: var(--muted);
@@ -645,6 +650,9 @@
       <div class="submit-area">
         <button id="submit-button" class="submit-button" type="submit">相談内容を送信する</button>
         <p id="submit-error" class="submit-error" role="alert" aria-live="assertive"></p>
+        <div id="submit-help" class="urgent-box submit-help" hidden>
+          <a class="phone-link" href="tel:0120911427">0120-911-427</a>
+        </div>
         <p class="privacy-note">入力いただいた情報は、ご相談への対応にのみ使用します。</p>
       </div>
     </form>
@@ -670,6 +678,7 @@
     const form = document.getElementById('consultation-form');
     const submitButton = document.getElementById('submit-button');
     const submitError = document.getElementById('submit-error');
+    const submitHelp = document.getElementById('submit-help');
     const completion = document.getElementById('completion');
     let isSubmitting = false;
     let lineContext = { userId: null, type: null };
@@ -805,6 +814,7 @@
       submitButton.textContent = '送信中...';
       submitError.textContent = '';
       submitError.classList.remove('is-visible');
+      submitHelp.hidden = true;
 
       try {
         const context = readLiffContext();
@@ -836,8 +846,9 @@
         window.scrollTo({ top: 0, behavior: 'smooth' });
       } catch (error) {
         console.error('Consultation form submission failed:', error);
-        submitError.textContent = '送信できませんでした。通信環境をご確認のうえ、もう一度お試しください。';
+        submitError.textContent = '送信できませんでした。もう一度お試しいただくか、お電話でご相談ください。';
         submitError.classList.add('is-visible');
+        submitHelp.hidden = false;
         isSubmitting = false;
         submitButton.disabled = false;
         submitButton.textContent = 'もう一度送信する';
