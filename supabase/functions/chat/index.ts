@@ -5,6 +5,14 @@
  */
 import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  CHAT_AI_LIMITS,
+  EntryBodyError,
+  isOverEntryLimit,
+  isValidSessionId,
+  readEntryJson,
+  sanitizeConversationHistory,
+} from "../_shared/public-entry-guard.ts";
 
 // ── FAQ Knowledge (embedded at build time for simplicity) ──
 const FAQ_KNOWLEDGE = `
@@ -428,10 +436,10 @@ serve(async (req) => {
   }
 
   try {
-    const body = await req.json();
+    const body = await readEntryJson(req);
     const { session_id, user_name, message, conversation_history } = body;
 
-    if (!session_id || !message) {
+    if (!isValidSessionId(session_id) || typeof message !== 'string' || !message) {
       return new Response(
         JSON.stringify({ error: 'session_id and message are required' }),
         { status: 400, headers: { ...headers, 'Content-Type': 'application/json' } },
@@ -440,6 +448,7 @@ serve(async (req) => {
 
     // Enforce input length
     const sanitizedMessage = message.slice(0, 500);
+    const senderName = typeof user_name === 'string' ? user_name.slice(0, 50) : '';
 
     // Rate limit check
     if (!checkRateLimit(session_id)) {
@@ -449,11 +458,30 @@ serve(async (req) => {
       );
     }
 
+    // The session limit above is per worker and the sender picks the id, so the limit
+    // that protects the AI budget is counted in the database.
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+    const limiter = createClient(Deno.env.get('SUPABASE_URL') ?? '', serviceKey);
+    const overLimit = await isOverEntryLimit({
+      consume: (args) => limiter.rpc('consume_public_entry_limit', args),
+      req,
+      scope: 'chat',
+      limits: CHAT_AI_LIMITS,
+      pepper: serviceKey,
+      whenUnavailable: 'block',
+    });
+    if (overLimit) {
+      return new Response(
+        JSON.stringify({ error: '質問の上限に達しました。しばらく時間をおいてからお試しください。' }),
+        { status: 429, headers: { ...headers, 'Content-Type': 'application/json' } },
+      );
+    }
+
     // Log user message (async, don't await)
-    logMessage(session_id, user_name || '', 'user', sanitizedMessage, 'ai_question');
+    logMessage(session_id, senderName, 'user', sanitizedMessage, 'ai_question');
 
     // Call Gemini with streaming
-    const geminiStream = await callGemini(sanitizedMessage, conversation_history || []);
+    const geminiStream = await callGemini(sanitizedMessage, sanitizeConversationHistory(conversation_history));
 
     // Wrap stream to capture full assistant response for DB logging
     let fullResponse = '';
@@ -465,7 +493,7 @@ serve(async (req) => {
           controller.close();
           // Log the complete assistant response to DB
           if (fullResponse.trim()) {
-            logMessage(session_id, user_name || '', 'assistant', fullResponse.trim(), 'ai_response');
+            logMessage(session_id, senderName, 'assistant', fullResponse.trim(), 'ai_response');
           }
           return;
         }
@@ -491,6 +519,12 @@ serve(async (req) => {
       },
     });
   } catch (err) {
+    if (err instanceof EntryBodyError) {
+      return new Response(
+        JSON.stringify({ error: err.message }),
+        { status: err.status, headers: { ...headers, 'Content-Type': 'application/json' } },
+      );
+    }
     console.error('Chat function error:', err);
     return new Response(
       JSON.stringify({ error: 'Internal server error' }),
