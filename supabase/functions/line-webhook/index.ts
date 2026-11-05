@@ -281,7 +281,14 @@ serve(async (req) => {
         await replyFormGuidance(channelAccessToken, event.replyToken);
       }
 
-      if (apiKey && newLog) {
+      const overFirstAiLimit = apiKey && newLog && await isOverIdentifiedLimit({
+        consume: (args) => supabase.rpc("consume_public_entry_limit", args),
+        subject: userId,
+        scope: "line_talk",
+        limits: LINE_TALK_AI_LIMITS,
+        pepper: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      });
+      if (apiKey && newLog && !overFirstAiLimit) {
         const result = await tryExtractPatientInfo(apiKey, text);
         if (
           result && result.has_enough_info === true && result.patient_name &&
