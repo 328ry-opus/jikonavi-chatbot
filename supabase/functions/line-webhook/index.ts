@@ -5,6 +5,7 @@
  */
 import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { isOverIdentifiedLimit, LINE_TALK_AI_LIMITS } from "../_shared/public-entry-guard.ts";
 
 import {
   generateHmacSignature,
@@ -199,8 +200,16 @@ serve(async (req) => {
           ? appended.messages
           : [...(existing.messages || []), lineMessage];
 
-        // Try to extract patient info from accumulated messages
-        if (apiKey) {
+        // Try to extract patient info from accumulated messages. Past the limit the
+        // message stays in the log for staff, and only the paid AI call is skipped.
+        const overAiLimit = apiKey && await isOverIdentifiedLimit({
+          consume: (args) => supabase.rpc("consume_public_entry_limit", args),
+          subject: userId,
+          scope: "line_talk",
+          limits: LINE_TALK_AI_LIMITS,
+          pepper: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+        });
+        if (apiKey && !overAiLimit) {
           const allText = messages.filter((m: any) => m.role === "user").map((
             m: any,
           ) => m.text).join("\n");

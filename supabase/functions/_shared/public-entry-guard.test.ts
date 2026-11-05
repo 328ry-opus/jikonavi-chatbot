@@ -5,6 +5,8 @@ import {
   EntryBodyError,
   FORM_SUBMIT_LIMITS,
   isOverEntryLimit,
+  isOverIdentifiedLimit,
+  LINE_TALK_AI_LIMITS,
   isValidSessionId,
   MAX_ENTRY_BODY_BYTES,
   readEntryJson,
@@ -68,6 +70,30 @@ Deno.test("an unavailable counter blocks the AI call and lets a form through", a
   assertEquals(
     await isOverEntryLimit({ ...base, consume, scope: "chat_form", limits: FORM_SUBMIT_LIMITS, whenUnavailable: "allow" }),
     false,
+  );
+});
+
+Deno.test("counts a verified id without storing it, and stops when the counter is unavailable", async () => {
+  const c = counter();
+  const over = await isOverIdentifiedLimit({
+    consume: c.consume, subject: "U1234", scope: "line_talk", limits: LINE_TALK_AI_LIMITS, pepper: "pepper",
+  });
+  assertEquals(over, false);
+  assert(!c.calls[0].p_key.includes("U1234"));
+  const reached = counter(["line_talk:client"]);
+  assertEquals(
+    await isOverIdentifiedLimit({
+      consume: reached.consume, subject: "U1234", scope: "line_talk", limits: LINE_TALK_AI_LIMITS, pepper: "pepper",
+    }),
+    true,
+  );
+  assertEquals(reached.calls.length, 1);
+  assertEquals(
+    await isOverIdentifiedLimit({
+      consume: () => Promise.resolve({ data: null, error: new Error("missing") }),
+      subject: "U1234", scope: "line_talk", limits: LINE_TALK_AI_LIMITS, pepper: "pepper",
+    }),
+    true,
   );
 });
 

@@ -42,6 +42,12 @@ export const FORM_SUBMIT_LIMITS: EntryLimit[] = [
   { label: "all", limit: 100, windowSeconds: 86400, perClient: false },
 ];
 
+// One message from a LINE user triggers one AI extraction while their details are incomplete.
+export const LINE_TALK_AI_LIMITS: EntryLimit[] = [
+  { label: "client", limit: 30, windowSeconds: 3600, perClient: true },
+  { label: "all", limit: 500, windowSeconds: 86400, perClient: false },
+];
+
 export type ConsumeLimit = (
   args: { p_scope: string; p_key: string; p_limit: number; p_window_seconds: number },
 ) => PromiseLike<{ data: unknown; error: unknown }>;
@@ -85,6 +91,38 @@ export async function isOverEntryLimit(input: {
     if (error || typeof data !== "boolean") {
       console.error("Entry limit unavailable:", input.scope, limit.label);
       return input.whenUnavailable === "block";
+    }
+    if (!data) {
+      console.warn("Entry limit reached:", input.scope, limit.label);
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Same check for callers identified by a verified id instead of a network address. */
+export async function isOverIdentifiedLimit(input: {
+  consume: ConsumeLimit;
+  subject: string;
+  scope: string;
+  limits: EntryLimit[];
+  pepper: string;
+}): Promise<boolean> {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(`${input.pepper}:${input.subject}`),
+  );
+  const client = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
+  for (const limit of input.limits) {
+    const { data, error } = await input.consume({
+      p_scope: `${input.scope}:${limit.label}`,
+      p_key: limit.perClient ? client : "all",
+      p_limit: limit.limit,
+      p_window_seconds: limit.windowSeconds,
+    });
+    if (error || typeof data !== "boolean") {
+      console.error("Entry limit unavailable:", input.scope, limit.label);
+      return true;
     }
     if (!data) {
       console.warn("Entry limit reached:", input.scope, limit.label);
