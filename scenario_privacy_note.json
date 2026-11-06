@@ -2,10 +2,15 @@
   "_meta": {
     "experiment_id": "privacy_note",
     "variant": "b",
-    "scenario_version": "2026-11-06"
+    "scenario_version": "2026-11-06b"
   },
   "root": {
     "message": "どのようなご相談ですか？",
+    "privacy_note": {
+      "text": "ご入力いただいた内容は暗号化して送信されます。事故なびの担当者が通院先のご案内やご相談への対応のためにのみ使用いたします。",
+      "link_label": "個人情報の取り扱い",
+      "link_url": "https://jiko-navi.jp/policy/"
+    },
     "options": [
       {
         "label": "通院先を探している",
