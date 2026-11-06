@@ -65,6 +65,8 @@ test("accident date offers one-tap choices and defaults to the local today; cont
   }
   assert.doesNotMatch(source, /new Date\(\)\.toISOString\(\)\.split\('T'\)\[0\]/u);
   assert.match(source, /const today = localDateString\(new Date\(\)\);/u);
+  // Choosing "それより前" clears the date so the required check waits for a calendar pick.
+  assert.match(source, /\} else \{\s*\/\/ Earlier date[^\n]*\n\s*input\.value = '';\s*formState\[field\.field\] = '';/u);
 });
 
 test("chat header shows the Jikonavi logo mark instead of an emoji", () => {

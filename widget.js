@@ -807,6 +807,9 @@
                 formState[field.field] = input.value;
                 shell.classList.add('jn-date-hidden');
               } else {
+                // Earlier date: drop the quick-choice date so "次へ" waits for a calendar pick.
+                input.value = '';
+                formState[field.field] = '';
                 shell.classList.remove('jn-date-hidden');
                 input.focus();
                 try { if (typeof input.showPicker === 'function') input.showPicker(); } catch (e) { /* picker needs a gesture or is unsupported */ }
