@@ -14,20 +14,38 @@ test("the served experiment files exist and carry matching meta", async () => {
     const scenario = await load(file);
     assert.equal(scenario._meta.experiment_id, id);
     assert.equal(scenario._meta.variant, key);
-    assert.equal(scenario._meta.scenario_version, "2026-11-06");
+    assert.equal(scenario._meta.scenario_version, "2026-11-06b");
   }
 });
 
-test("variant b differs from a only by the privacy note on the contact step", async () => {
+test("variant b differs from a only by the privacy note on the first screen and the contact step", async () => {
   const a = await load("scenario.json");
   const b = await load("scenario_privacy_note.json");
-  const { privacy_note: note, ...bStep3 } = b.step3_contact;
-  assert.deepEqual(bStep3, a.step3_contact);
-  assert.equal(note.link_url, "https://jiko-navi.jp/policy/");
-  assert.equal(note.link_label, "個人情報の取り扱い");
-  assert.ok(note.text.length > 0);
-  const strip = (s) => ({ ...s, _meta: { ...s._meta, variant: "" }, step3_contact: null });
+  const notes = [];
+  for (const node of ["root", "step3_contact"]) {
+    const { privacy_note: note, ...rest } = b[node];
+    assert.deepEqual(rest, a[node]);
+    assert.equal(a[node].privacy_note, undefined);
+    assert.equal(note.link_url, "https://jiko-navi.jp/policy/");
+    assert.equal(note.link_label, "個人情報の取り扱い");
+    notes.push(note.text);
+  }
+  assert.equal(notes[0], notes[1]);
+  assert.match(notes[0], /のためにのみ使用いたします。$/u);
+  const strip = (s) => ({ ...s, _meta: { ...s._meta, variant: "" }, root: null, step3_contact: null });
   assert.deepEqual(strip(b), strip(a));
+});
+
+test("chat header shows the Jikonavi logo mark instead of an emoji", () => {
+  assert.match(source, /const LOGO_MARK_SRC = 'data:image\/webp;base64,[A-Za-z0-9+/=]+';/u);
+  assert.match(source, /<div class="jn-header-avatar"><img src="\$\{LOGO_MARK_SRC\}" alt="" width="28" height="28"><\/div>/u);
+  assert.doesNotMatch(source, /🏥/u);
+});
+
+test("bot messages use the receptionist photo from the site hero as the avatar", () => {
+  assert.match(source, /const OPERATOR_PHOTO_SRC = 'data:image\/png;base64,[A-Za-z0-9+/=]+';/u);
+  assert.match(source, /const ICON_OPERATOR = `<img src="\$\{OPERATOR_PHOTO_SRC\}" alt="" width="32" height="32">`;/u);
+  assert.match(source, /\.jn-msg-avatar img \{ width: 100%; height: 100%; object-fit: cover; display: block; \}/u);
 });
 
 test("the phone guidance matches the 24-hour line", async () => {

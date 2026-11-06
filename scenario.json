@@ -2,7 +2,7 @@
   "_meta": {
     "experiment_id": "privacy_note",
     "variant": "a",
-    "scenario_version": "2026-11-06"
+    "scenario_version": "2026-11-06b"
   },
   "root": {
     "message": "どのようなご相談ですか？",
