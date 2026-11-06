@@ -17,15 +17,20 @@
     widgetHeight: 640,
     maxInputLength: 500,
     botName: '事故なび',
+    // Mobile auto-open delay. 11/6: 4000 -> 1000 (Matsumoto request: open sooner so
+    // fewer visitors leave before the chat appears; the page still shows for a moment).
+    autoOpenDelayMs: 1000,
     greeting: '交通事故に遭われた方へ\n\n通院前に事故なびへ無料相談すると、お見舞金 最大50,000円をお受け取りいただけます。\nまずはお気軽にご相談ください。',
   };
 
   // Experiment config (max 2 variants at a time)
+  // 11/6: contact_friction ended (7/4-11/6: contact step -> submit A 38.4% vs B 34.1%,
+  // B did not win), so A stays and the new B adds a note on how the contact details are handled.
   const EXPERIMENT = {
-    id: 'contact_friction',
+    id: 'privacy_note',
     variants: [
       { key: 'a', weight: 0.5, file: 'scenario.json' },
-      { key: 'b', weight: 0.5, file: 'scenario_contact_light.json' },
+      { key: 'b', weight: 0.5, file: 'scenario_privacy_note.json' },
     ],
   };
 
@@ -265,9 +270,9 @@
       .jn-trigger-label {
         font-size: 13px; padding: 8px 20px 8px 12px; margin-right: -10px; border-radius: 18px;
       }
-      .jn-trigger { width: 56px; height: 56px; }
-      .jn-trigger svg { width: 26px; height: 26px; }
-      .jn-badge { width: 14px; height: 14px; }
+      .jn-trigger { width: 64px; height: 64px; }
+      .jn-trigger svg { width: 30px; height: 30px; }
+      .jn-badge { width: 15px; height: 15px; }
       .jn-header-close { display: flex; align-items: center; justify-content: center; }
       .jn-input-area {
         padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
@@ -333,6 +338,16 @@
     .jn-form-submit:hover { background: ${CONFIG.accentColor}; }
     .jn-form-submit:disabled { background: #ccc; cursor: not-allowed; }
 
+    .jn-form-privacy {
+      display: flex; gap: 8px; align-items: flex-start;
+      margin: 2px 0 10px; padding: 10px 12px; border-radius: 10px;
+      background: #f1f5ff; border: 1px solid #dbe5ff; color: #334155;
+      font-size: 12px; line-height: 1.65;
+    }
+    .jn-form-privacy svg { flex: 0 0 16px; width: 16px; height: 16px; margin-top: 2px; color: ${CONFIG.brandColor}; }
+    .jn-form-privacy p { margin: 0; }
+    .jn-form-privacy a { color: ${CONFIG.brandColor}; text-decoration: underline; text-underline-offset: 2px; }
+
     .jn-form-error {
       font-size: 11px; color: #e74c3c; margin-top: 4px; display: none;
     }
@@ -349,6 +364,7 @@
   const ICON_CLOSE = '<svg class="icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
   const ICON_SEND = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>';
   const ICON_PHONE = '<svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2a1 1 0 0 1 1.01-.24c1.12.37 2.33.57 3.57.57a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1.02l-2.2 2.2z"/></svg>';
+  const ICON_LOCK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
   // Operator with headset
   const ICON_OPERATOR = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4z"/><path d="M12 14c-4 0-8 2-8 4v1c0 .55.45 1 1 1h14c.55 0 1-.45 1-1v-1c0-2-4-4-8-4z"/><path d="M20 8h-1c0-3.31-2.69-6-6-6S7 4.69 7 8H6c-.55 0-1 .45-1 1v2c0 .55.45 1 1 1h1v-1c0-2.76 2.24-5 5-5s5 2.24 5 5v1h1c.55 0 1-.45 1-1V9c0-.55-.45-1-1-1z"/></svg>';
 
@@ -640,6 +656,32 @@
     }
   }
 
+  // Builds the note from scenario JSON with textContent only; the link must stay on jiko-navi.jp.
+  function renderPrivacyNote(note) {
+    if (!note || typeof note.text !== 'string' || !note.text) return null;
+    const box = document.createElement('div');
+    box.className = 'jn-form-privacy';
+    box.innerHTML = ICON_LOCK;
+    const p = document.createElement('p');
+    p.appendChild(document.createTextNode(note.text));
+    let linkUrl = null;
+    try {
+      const url = new URL(note.link_url || '', 'https://jiko-navi.jp/');
+      if (url.protocol === 'https:' && url.hostname === 'jiko-navi.jp') linkUrl = url.href;
+    } catch (e) { /* invalid url: no link */ }
+    if (linkUrl && note.link_label) {
+      p.appendChild(document.createTextNode(' '));
+      const a = document.createElement('a');
+      a.href = linkUrl;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.textContent = note.link_label;
+      p.appendChild(a);
+    }
+    box.appendChild(p);
+    return box;
+  }
+
   function renderMultiFieldForm(node) {
     optionsContainer.innerHTML = '';
     const form = document.createElement('div');
@@ -765,6 +807,10 @@
 
       form.appendChild(group);
     });
+
+    // Optional note on how the entered details are handled (shown right above the submit button).
+    const privacyNote = renderPrivacyNote(node.privacy_note);
+    if (privacyNote) form.appendChild(privacyNote);
 
     // Submit button
     const submitBtn = document.createElement('button');
@@ -1150,6 +1196,93 @@
     document.addEventListener('DOMContentLoaded', mountMobileBottomBarTrigger, { once: true });
   }
 
+  // Mobile hero (11/6, Matsumoto request): on phones the site's first screen offers only
+  // the phone button. Show chat and phone side by side (chat left, half each).
+  // - Top page: reveal the chat button the site already renders but hides on phones.
+  // - Clinic pages: add a chat button next to the phone button.
+  // Bridge until the site ships the same layout itself: skipped when the site marks
+  // its hero with [data-hero-chat].
+  const HERO_CHAT_MEDIA = '(max-width: 760px)';
+  function mountHeroChat() {
+    if (document.querySelector('[data-hero-chat]')) return;
+    const home = document.querySelector('.home-phone-first .hero-cta');
+    const clinic = document.querySelector('.clinic-hero-contact');
+    const clinicPhone = clinic && clinic.querySelector('.clinic-hero-phone');
+    if (!home && !clinicPhone) return;
+
+    if (!document.getElementById('jikonavi-chat-hero-style')) {
+      const style = document.createElement('style');
+      style.id = 'jikonavi-chat-hero-style';
+      style.textContent = `
+        .jn-hero-row > .jn-hero-chat, .jn-phone-compact { display: none; }
+        @media ${HERO_CHAT_MEDIA} {
+          .jn-hero-split, .jn-hero-row { display: flex !important; gap: 8px; align-items: stretch; }
+          .jn-hero-split > .btn, .jn-hero-row > .btn {
+            flex: 1 1 0 !important; width: auto !important; min-width: 0; min-height: 66px;
+            margin: 0; padding: 10px 6px !important; border-radius: 12px;
+            justify-content: center !important; text-align: center;
+          }
+          .jn-hero-split > .btn-chat, .jn-hero-row > .jn-hero-chat {
+            display: flex !important; order: -1; flex-direction: column; align-items: center; gap: 3px;
+            background: #2563eb; color: #fff; border: 2px solid #2563eb; box-shadow: 0 6px 18px #2563eb35;
+            font-weight: 900; line-height: 1.35;
+          }
+          .jn-hero-split > .btn-chat svg, .jn-hero-row > .jn-hero-chat svg { display: none; }
+          .jn-hero-split > .btn-chat .btn-label, .jn-hero-chat .jn-hero-chat-label {
+            display: flex; flex-direction: column; align-items: center; gap: 2px;
+            font-size: clamp(13px, 4.1vw, 16px); line-height: 1.35; text-align: center; white-space: nowrap;
+          }
+          .jn-hero-split > .btn-chat small, .jn-hero-chat small,
+          .jn-hero-split > .hero-phone small, .jn-phone-compact small {
+            font-size: 12px; font-weight: 700; opacity: .95; white-space: nowrap; letter-spacing: 0;
+          }
+          /* Same two lines on both pages: the number, then "24時間365日・通話無料". */
+          .jn-hero-row > .clinic-hero-phone > :not(.jn-phone-compact) { display: none !important; }
+          .jn-hero-row > .clinic-hero-phone > .jn-phone-compact {
+            display: flex; flex-direction: column; align-items: center; gap: 2px; line-height: 1.4;
+          }
+          .jn-hero-split > .hero-phone .btn-label { gap: 2px; }
+          .jn-hero-split > .hero-phone strong, .jn-phone-compact strong {
+            font-size: clamp(14px, 4.6vw, 18px); font-weight: 900; white-space: nowrap; letter-spacing: .01em;
+          }
+        }
+        @media (max-width: 340px) {
+          .jn-hero-split > .btn-chat small, .jn-hero-chat small,
+          .jn-hero-split > .hero-phone small, .jn-phone-compact small { font-size: 11px; white-space: normal; }
+        }
+      `;
+      (document.head || document.documentElement).appendChild(style);
+    }
+
+    if (home) home.classList.add('jn-hero-split');
+
+    if (clinicPhone && !clinic.querySelector('.jn-hero-row')) {
+      const row = document.createElement('div');
+      row.className = 'jn-hero-row';
+      const chat = document.createElement('a');
+      chat.className = 'btn btn-chat jn-hero-chat';
+      chat.href = '/contact/';
+      chat.innerHTML = `${ICON_CHAT}<span class="jn-hero-chat-label">チャットで相談する<small>まず軽くたずねたい方</small></span>`;
+      chat.addEventListener('click', (event) => {
+        event.preventDefault();
+        window.jikonautoChat.open();
+      });
+      // Compact two-line label for the half-width phone button (the site's own label stays for wide screens).
+      const compact = document.createElement('span');
+      compact.className = 'jn-phone-compact';
+      compact.innerHTML = '<strong>0120-911-427</strong><small>24時間365日・通話無料</small>';
+      clinicPhone.appendChild(compact);
+      clinicPhone.parentNode.insertBefore(row, clinicPhone);
+      row.appendChild(chat);
+      row.appendChild(clinicPhone);
+    }
+  }
+
+  mountHeroChat();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', mountHeroChat, { once: true });
+  }
+
   window.addEventListener('pagehide', () => {
     trackClose('pagehide');
   });
@@ -1201,9 +1334,10 @@
     if (window.dataLayer) window.dataLayer.push({ event: 'jn_chat_peek_shown' });
   }
 
-  // Mobile: open the full-screen chat 4 seconds after landing (once per session).
+  // Mobile: open the full-screen chat shortly after landing (once per session).
   // 10/27 restored from the 9/30 peek: chat leads from ads fell from 94 (Sep) to 10 (Oct 1-25)
   // right after the peek replaced the auto-open. showPeek() above is kept for a later A/B test.
+  // 11/6: delay shortened from 4 seconds to CONFIG.autoOpenDelayMs.
   // Form pages skip it without using up the once-per-session flag.
   if (window.innerWidth <= 480 && !labelOff) {
     try {
@@ -1216,7 +1350,7 @@
             window.jikonautoChat.open();
             sessionStorage.setItem('jn_auto_open_done', '1');
           }
-        }, 4000);
+        }, CONFIG.autoOpenDelayMs);
       }
     } catch (e) { /* sessionStorage blocked */ }
   }
