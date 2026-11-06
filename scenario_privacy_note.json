@@ -2,7 +2,24 @@
   "_meta": {
     "experiment_id": "privacy_note",
     "variant": "b",
-    "scenario_version": "2026-11-06b"
+    "scenario_version": "2026-11-06c"
+  },
+  "clinic_entry": {
+    "greeting": "{clinic}への通院をお考えの方へ\n\n交通事故のケガでの通院なら、事故なびが院への確認や予約を無料でお手伝いします。",
+    "root": {
+      "message": "どのようなご相談ですか？",
+      "options": [
+        { "label": "この院に通いたい", "next": "step1_accident", "form_value": "この院を希望：{clinic}" },
+        { "label": "近くのほかの院も知りたい", "next": "step1_accident", "form_value": "近くの院も知りたい：{clinic}" },
+        { "label": "その他のご相談（慰謝料・診断書について）", "next": "step1_accident", "form_value": "その他のご相談" },
+        { "label": "すぐに電話で相談したい", "next": "phone" }
+      ],
+      "privacy_note": {
+        "text": "ご入力いただいた内容は暗号化して送信されます。事故なびの担当者が通院先のご案内やご相談への対応のためにのみ使用いたします。",
+        "link_label": "個人情報の取り扱い",
+        "link_url": "https://jiko-navi.jp/policy/"
+      }
+    }
   },
   "root": {
     "message": "どのようなご相談ですか？",
@@ -65,6 +82,12 @@
         "field": "accident_date",
         "label": "事故にあった日",
         "type": "date",
+        "quick": [
+          { "label": "今日", "days": 0 },
+          { "label": "昨日", "days": 1 },
+          { "label": "一昨日（おととい）", "days": 2 },
+          { "label": "それより前" }
+        ],
         "required": true
       }
     ],
@@ -198,6 +221,7 @@
         "field": "contact_time",
         "label": "ご希望の連絡時間帯",
         "type": "radio",
+        "default": "いつでもOK",
         "required": true,
         "options": [
           {
