@@ -2,7 +2,19 @@
   "_meta": {
     "experiment_id": "privacy_note",
     "variant": "a",
-    "scenario_version": "2026-11-06b"
+    "scenario_version": "2026-11-06c"
+  },
+  "clinic_entry": {
+    "greeting": "{clinic}への通院をお考えの方へ\n\n交通事故のケガでの通院なら、事故なびが院への確認や予約を無料でお手伝いします。",
+    "root": {
+      "message": "どのようなご相談ですか？",
+      "options": [
+        { "label": "この院に通いたい", "next": "step1_accident", "form_value": "この院を希望：{clinic}" },
+        { "label": "近くのほかの院も知りたい", "next": "step1_accident", "form_value": "近くの院も知りたい：{clinic}" },
+        { "label": "その他のご相談（慰謝料・診断書について）", "next": "step1_accident", "form_value": "その他のご相談" },
+        { "label": "すぐに電話で相談したい", "next": "phone" }
+      ]
+    }
   },
   "root": {
     "message": "どのようなご相談ですか？",
@@ -60,6 +72,12 @@
         "field": "accident_date",
         "label": "事故にあった日",
         "type": "date",
+        "quick": [
+          { "label": "今日", "days": 0 },
+          { "label": "昨日", "days": 1 },
+          { "label": "一昨日（おととい）", "days": 2 },
+          { "label": "それより前" }
+        ],
         "required": true
       }
     ],
@@ -188,6 +206,7 @@
         "field": "contact_time",
         "label": "ご希望の連絡時間帯",
         "type": "radio",
+        "default": "いつでもOK",
         "required": true,
         "options": [
           {

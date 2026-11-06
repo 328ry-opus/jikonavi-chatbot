@@ -330,6 +330,8 @@
       background: #fff; overflow: hidden; box-sizing: border-box;
     }
     .jn-date-shell:focus-within { border-color: ${CONFIG.brandColor}; }
+    .jn-date-shell.jn-date-hidden { display: none; }
+    .jn-date-quick + .jn-date-shell { margin-top: 8px; }
     .jn-date-shell input[type="date"] {
       flex: 1 1 auto; width: 100%; min-width: 0;
       padding: 0; border: 0; background: transparent;
@@ -740,6 +742,11 @@
             btn.classList.add('selected');
             formState[field.field] = opt.value;
           });
+          // Optional preselected choice from the scenario (e.g. contact_time "いつでもOK").
+          if (field.default !== undefined && opt.value === field.default) {
+            btn.classList.add('selected');
+            formState[field.field] = opt.value;
+          }
           radioGroup.appendChild(btn);
         });
         group.appendChild(radioGroup);
@@ -771,11 +778,48 @@
         const input = document.createElement('input');
         input.type = 'date';
         input.required = !!field.required;
-        // Default to today
-        input.value = new Date().toISOString().split('T')[0];
+        // Default to today in the visitor's own time zone (toISOString() is UTC, which
+        // gave yesterday's date in Japan before 9:00).
+        const today = localDateString(new Date());
+        input.value = today;
+        input.max = today;
         formState[field.field] = input.value;
         input.addEventListener('change', () => { formState[field.field] = input.value; });
         shell.appendChild(input);
+        // Optional quick choices ("今日" / "昨日" / ...): one tap instead of the calendar.
+        // A choice without "days" opens the calendar for an earlier date.
+        if (Array.isArray(field.quick) && field.quick.length) {
+          const chips = document.createElement('div');
+          chips.className = 'jn-radio-group jn-date-quick';
+          field.quick.forEach(q => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'jn-radio-btn';
+            btn.textContent = q.label;
+            if (q.days === 0) btn.classList.add('selected');
+            btn.addEventListener('click', () => {
+              chips.querySelectorAll('.jn-radio-btn').forEach(b => b.classList.remove('selected'));
+              btn.classList.add('selected');
+              if (typeof q.days === 'number') {
+                const d = new Date();
+                d.setDate(d.getDate() - q.days);
+                input.value = localDateString(d);
+                formState[field.field] = input.value;
+                shell.classList.add('jn-date-hidden');
+              } else {
+                // Earlier date: drop the quick-choice date so "次へ" waits for a calendar pick.
+                input.value = '';
+                formState[field.field] = '';
+                shell.classList.remove('jn-date-hidden');
+                input.focus();
+                try { if (typeof input.showPicker === 'function') input.showPicker(); } catch (e) { /* picker needs a gesture or is unsupported */ }
+              }
+            });
+            chips.appendChild(btn);
+          });
+          group.appendChild(chips);
+          shell.classList.add('jn-date-hidden');
+        }
         group.appendChild(shell);
 
       } else if (field.type === 'textarea') {
@@ -1377,6 +1421,32 @@
     } catch (e) { /* sessionStorage blocked */ }
   }
 
+  function localDateString(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  // The chat-form endpoint keeps the first 50 characters of inquiry_type.
+  const INQUIRY_TYPE_MAX = 50;
+
+  // A normal clinic detail page has the site's phone block and the clinic name as its h1.
+  function clinicContext() {
+    if (!document.querySelector('.clinic-hero-contact')) return null;
+    const h1 = document.querySelector('.clinic-page-hero h1');
+    const name = h1 ? h1.textContent.replace(/\s+/g, ' ').trim() : '';
+    return name && name.length <= 60 ? { name } : null;
+  }
+
+  // Replaces {clinic}; with maxLen, shortens the name so the whole string fits.
+  function fillClinic(template, name, maxLen) {
+    if (typeof template !== 'string' || !template.includes('{clinic}')) return template;
+    let value = name;
+    if (maxLen) {
+      const room = maxLen - (template.length - '{clinic}'.length);
+      if (value.length > room) value = room > 1 ? value.slice(0, room - 1) + '…' : '';
+    }
+    return template.split('{clinic}').join(value);
+  }
+
   // ── Init ────────────────────────────────────────────────
   async function initChat() {
     // Variant assignment (persisted per experiment)
@@ -1436,7 +1506,24 @@
       page: window.location.pathname || '/',
     });
 
-    addMessage(CONFIG.greeting, 'bot');
+    // Clinic detail pages: greet with the clinic's name and offer clinic-specific choices
+    // (11/6: auto-opens on clinic pages started only 0.9% of the time vs 16% on area lists).
+    let greeting = CONFIG.greeting;
+    const clinic = clinicContext();
+    const entry = state.scenarioData && state.scenarioData.clinic_entry;
+    if (clinic && entry && entry.root && typeof entry.greeting === 'string') {
+      greeting = fillClinic(entry.greeting, clinic.name);
+      state.scenarioData.root = {
+        ...entry.root,
+        options: (entry.root.options || []).map(opt => ({
+          ...opt,
+          label: fillClinic(opt.label, clinic.name),
+          form_value: fillClinic(opt.form_value, clinic.name, INQUIRY_TYPE_MAX),
+        })),
+      };
+    }
+
+    addMessage(greeting, 'bot');
     state.nodeHistory.push('root');
     showScenarioNode('root');
     // Hide badge after first open
