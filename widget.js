@@ -278,14 +278,18 @@
       .jn-trigger-label {
         font-size: 13px; padding: 8px 20px 8px 12px; margin-right: -10px; border-radius: 18px;
       }
-      .jn-trigger { width: 64px; height: 64px; }
-      .jn-trigger svg { width: 30px; height: 30px; }
-      .jn-badge { width: 15px; height: 15px; }
+      .jn-trigger { width: 72px; height: 72px; }
+      .jn-trigger svg { width: 34px; height: 34px; }
+      .jn-badge { width: 16px; height: 16px; }
       .jn-header-close { display: flex; align-items: center; justify-content: center; }
       .jn-input-area {
         padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
       }
       .jn-input { font-size: 16px; }
+      /* 11/6: larger choices on phones (about 46px tall, above the 44px tap-target guideline). */
+      .jn-options { gap: 8px; }
+      .jn-option-btn { font-size: 15px; padding: 12px 16px; border-radius: 12px; line-height: 1.45; }
+      .jn-phone-btn { font-size: 15px; padding: 13px 16px; border-radius: 12px; }
     }
 
     /* Multi-field form */
