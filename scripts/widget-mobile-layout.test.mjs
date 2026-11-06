@@ -8,8 +8,9 @@ const mobileBlock = source.match(/@media \(max-width: 480px\) \{(?<body>[\s\S]*?
 test("mobile chat trigger shows a compact label like desktop", () => {
   assert.match(mobileBlock, /\.jn-trigger-label \{\s*font-size: 13px;/u);
   assert.match(source, /\.jn-trigger-wrap\.jn-peek-on \{ display: none !important; \}/u);
-  assert.match(mobileBlock, /\.jn-trigger \{ width: 64px; height: 64px; \}/u);
-  assert.match(mobileBlock, /\.jn-trigger svg \{ width: 30px; height: 30px; \}/u);
+  assert.match(mobileBlock, /\.jn-trigger \{ width: 72px; height: 72px; \}/u);
+  assert.match(mobileBlock, /\.jn-trigger svg \{ width: 34px; height: 34px; \}/u);
+  assert.match(mobileBlock, /\.jn-option-btn \{ font-size: 15px; padding: 12px 16px;/u);
 });
 
 test("desktop trigger and label remain unchanged", () => {
