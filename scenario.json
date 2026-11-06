@@ -1,8 +1,8 @@
 {
   "_meta": {
-    "experiment_id": "contact_friction",
+    "experiment_id": "privacy_note",
     "variant": "a",
-    "scenario_version": "2026-08-09"
+    "scenario_version": "2026-11-06"
   },
   "root": {
     "message": "どのようなご相談ですか？",
@@ -230,7 +230,7 @@
     "phone_number": "0120-911-427"
   },
   "phone": {
-    "message": "お電話でのご相談はこちらから。専門スタッフが無料でご対応いたします。\n\n0120-911-427\n受付時間：9:00〜21:00（年中無休）\n\nお気軽にお電話ください。",
+    "message": "お電話でのご相談はこちらから。専門スタッフが無料でご対応いたします。\n\n0120-911-427\n受付時間：24時間365日（通話無料）\n\nお気軽にお電話ください。",
     "options": [
       {
         "label": "チャットで相談する",

@@ -1,0 +1,251 @@
+{
+  "_meta": {
+    "experiment_id": "privacy_note",
+    "variant": "b",
+    "scenario_version": "2026-11-06"
+  },
+  "root": {
+    "message": "どのようなご相談ですか？",
+    "options": [
+      {
+        "label": "通院先を探している",
+        "next": "step1_accident",
+        "form_value": "通院先を探している"
+      },
+      {
+        "label": "通院先を変更したい",
+        "next": "step1_accident",
+        "form_value": "通院先を変更したい"
+      },
+      {
+        "label": "その他のご相談（慰謝料・診断書について）",
+        "next": "step1_accident",
+        "form_value": "その他のご相談"
+      },
+      {
+        "label": "すぐに電話で相談したい",
+        "next": "phone"
+      }
+    ]
+  },
+  "step1_accident": {
+    "message": "事故の概要を教えてください。【ステップ1/3】",
+    "form_type": "multi_field",
+    "fields": [
+      {
+        "field": "accident_situation",
+        "label": "事故の状況",
+        "type": "radio",
+        "required": true,
+        "options": [
+          {
+            "label": "追突された（被害者）",
+            "value": "追突（被害者）"
+          },
+          {
+            "label": "出合い頭にぶつかった",
+            "value": "出合い頭"
+          },
+          {
+            "label": "自分がぶつけてしまった（加害者）",
+            "value": "加害者"
+          },
+          {
+            "label": "わからない",
+            "value": "不明"
+          }
+        ]
+      },
+      {
+        "field": "accident_date",
+        "label": "事故にあった日",
+        "type": "date",
+        "required": true
+      }
+    ],
+    "next": "step2_symptoms"
+  },
+  "step2_symptoms": {
+    "message": "症状と通院希望エリアを教えてください。【ステップ2/3】",
+    "form_type": "multi_field",
+    "fields": [
+      {
+        "field": "symptoms",
+        "label": "症状を選んでください（複数選択OK）",
+        "type": "checkbox",
+        "required": true,
+        "options": [
+          {
+            "label": "首・肩が痛い",
+            "value": "首・肩"
+          },
+          {
+            "label": "腰・背中が痛い",
+            "value": "腰・背中"
+          },
+          {
+            "label": "頭痛・めまい",
+            "value": "頭痛・めまい"
+          },
+          {
+            "label": "手足のしびれ",
+            "value": "手足"
+          },
+          {
+            "label": "まだ症状が出ていない",
+            "value": "症状なし"
+          },
+          {
+            "label": "その他",
+            "value": "その他"
+          }
+        ]
+      },
+      {
+        "field": "pref",
+        "label": "通院希望エリア（都道府県）",
+        "type": "select",
+        "required": true,
+        "options": [
+          { "label": "北海道", "value": "北海道" },
+          { "label": "青森県", "value": "青森県" },
+          { "label": "岩手県", "value": "岩手県" },
+          { "label": "宮城県", "value": "宮城県" },
+          { "label": "秋田県", "value": "秋田県" },
+          { "label": "山形県", "value": "山形県" },
+          { "label": "福島県", "value": "福島県" },
+          { "label": "茨城県", "value": "茨城県" },
+          { "label": "栃木県", "value": "栃木県" },
+          { "label": "群馬県", "value": "群馬県" },
+          { "label": "埼玉県", "value": "埼玉県" },
+          { "label": "千葉県", "value": "千葉県" },
+          { "label": "東京都", "value": "東京都" },
+          { "label": "神奈川県", "value": "神奈川県" },
+          { "label": "新潟県", "value": "新潟県" },
+          { "label": "富山県", "value": "富山県" },
+          { "label": "石川県", "value": "石川県" },
+          { "label": "福井県", "value": "福井県" },
+          { "label": "山梨県", "value": "山梨県" },
+          { "label": "長野県", "value": "長野県" },
+          { "label": "岐阜県", "value": "岐阜県" },
+          { "label": "静岡県", "value": "静岡県" },
+          { "label": "愛知県", "value": "愛知県" },
+          { "label": "三重県", "value": "三重県" },
+          { "label": "滋賀県", "value": "滋賀県" },
+          { "label": "京都府", "value": "京都府" },
+          { "label": "大阪府", "value": "大阪府" },
+          { "label": "兵庫県", "value": "兵庫県" },
+          { "label": "奈良県", "value": "奈良県" },
+          { "label": "和歌山県", "value": "和歌山県" },
+          { "label": "鳥取県", "value": "鳥取県" },
+          { "label": "島根県", "value": "島根県" },
+          { "label": "岡山県", "value": "岡山県" },
+          { "label": "広島県", "value": "広島県" },
+          { "label": "山口県", "value": "山口県" },
+          { "label": "徳島県", "value": "徳島県" },
+          { "label": "香川県", "value": "香川県" },
+          { "label": "愛媛県", "value": "愛媛県" },
+          { "label": "高知県", "value": "高知県" },
+          { "label": "福岡県", "value": "福岡県" },
+          { "label": "佐賀県", "value": "佐賀県" },
+          { "label": "長崎県", "value": "長崎県" },
+          { "label": "熊本県", "value": "熊本県" },
+          { "label": "大分県", "value": "大分県" },
+          { "label": "宮崎県", "value": "宮崎県" },
+          { "label": "鹿児島県", "value": "鹿児島県" },
+          { "label": "沖縄県", "value": "沖縄県" }
+        ]
+      },
+      {
+        "field": "area",
+        "label": "市区町村・最寄駅",
+        "type": "text",
+        "required": true,
+        "placeholder": "例：船橋市／名古屋駅"
+      }
+    ],
+    "next": "step3_contact"
+  },
+  "step3_contact": {
+    "message": "最後にご連絡先を教えてください。【ステップ3/3】",
+    "form_type": "multi_field",
+    "privacy_note": {
+      "text": "ご入力いただいた内容は暗号化して送信されます。事故なびの担当者が通院先のご案内やご相談への対応のためにのみ使用いたします。",
+      "link_label": "個人情報の取り扱い",
+      "link_url": "https://jiko-navi.jp/policy/"
+    },
+    "fields": [
+      {
+        "field": "name",
+        "label": "お名前",
+        "type": "text",
+        "required": true,
+        "placeholder": "例：山田 太郎"
+      },
+      {
+        "field": "phone",
+        "label": "お電話番号",
+        "type": "tel",
+        "required": true,
+        "placeholder": "例：090-1234-5678"
+      },
+      {
+        "field": "contact_time",
+        "label": "ご希望の連絡時間帯",
+        "type": "radio",
+        "required": true,
+        "options": [
+          {
+            "label": "午前（9:00〜12:00）",
+            "value": "午前"
+          },
+          {
+            "label": "午後（12:00〜17:00）",
+            "value": "午後"
+          },
+          {
+            "label": "夕方以降（17:00〜）",
+            "value": "夕方以降"
+          },
+          {
+            "label": "いつでもOK",
+            "value": "いつでもOK"
+          }
+        ]
+      }
+    ],
+    "next": "confirm"
+  },
+  "confirm": {
+    "message": "ありがとうございます！入力内容を確認しています...",
+    "action": "submit_form"
+  },
+  "complete": {
+    "message": "ご相談ありがとうございます！\n専門スタッフからご連絡いたしますので、しばらくお待ちください。\n\nお急ぎの場合はお電話でもご相談いただけます。",
+    "options": [
+      {
+        "label": "電話で相談する",
+        "next": "phone"
+      },
+      {
+        "label": "最初に戻る",
+        "next": "root"
+      }
+    ],
+    "phone_number": "0120-911-427"
+  },
+  "phone": {
+    "message": "お電話でのご相談はこちらから。専門スタッフが無料でご対応いたします。\n\n0120-911-427\n受付時間：24時間365日（通話無料）\n\nお気軽にお電話ください。",
+    "options": [
+      {
+        "label": "チャットで相談する",
+        "next": "step1_accident"
+      },
+      {
+        "label": "最初に戻る",
+        "next": "root"
+      }
+    ],
+    "phone_number": "0120-911-427"
+  }
+}
