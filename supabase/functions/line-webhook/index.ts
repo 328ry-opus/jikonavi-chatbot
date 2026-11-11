@@ -13,6 +13,11 @@ import {
 } from "../_shared/auth-utils.ts";
 import { parseDate } from "../_shared/date-utils.ts";
 import { callGemini } from "../_shared/gemini-client.ts";
+import {
+  buildLineFollowupNote,
+  normalizeEventId,
+  recordLineFollowup,
+} from "../_shared/line-followup.ts";
 import { cleanPatientName, resolveNameKana } from "../_shared/name-utils.ts";
 import { normalizePhone } from "../_shared/phone-utils.ts";
 
@@ -144,37 +149,56 @@ serve(async (req) => {
         .maybeSingle();
 
       if (existing?.status === "registered") {
-        // Already registered — append message to log AND to patient notes
+        // Already registered — append message to log AND to patient notes.
+        // The LINE event id and the patient the message was received for are
+        // stored next to the message: the database compares them with the events
+        // it has recorded, so a recontact that was missed (fallback below) can be
+        // picked up later without guessing by time — also after the LINE user
+        // registers again and this log row is re-linked to a new patient.
+        const eventId = normalizeEventId(event.webhookEventId);
         const lineMessage = {
           text,
           timestamp,
           role: "user",
+          ...(eventId && existing.patient_id
+            ? { event_id: eventId, patient_id: existing.patient_id }
+            : {}),
         };
         const appended = await appendLineMessageToLog(supabase, existing.id, lineMessage);
         if (!appended) continue;
 
-        // Append to patient notes so staff can see follow-up messages
+        // Append to patient notes so staff can see follow-up messages. When the
+        // patient is already closed in the CRM (キャンセル / 完了 / ゴミ箱), the same
+        // database call records it as an open "LINE recontact" for the dashboard.
+        // The LINE event id makes the call safe to repeat (written once per event).
+        let followup = null;
         if (existing.patient_id && text) {
-          const jst = new Date(Date.now() + 9 * 60 * 60 * 1000);
-          const timeStr = `${jst.getUTCMonth() + 1}/${jst.getUTCDate()} ${jst.toISOString().slice(11, 16)}`;
-          const appendNote = `\n【LINE追加メッセージ ${timeStr}】${text}`;
-          const { error: appendNoteError } = await supabase.rpc(
-            "append_patient_note",
-            {
-              p_patient_id: existing.patient_id,
-              p_note: appendNote,
-            },
+          followup = await recordLineFollowup(
+            (name, args) => supabase.rpc(name, args),
+            existing.patient_id,
+            buildLineFollowupNote(text),
+            eventId,
           );
-          if (appendNoteError) {
+          if (!followup.saved) {
+            // The message itself is in line_message_log (appended above); only the
+            // note is missing. Kept at 200 so LINE does not redeliver the whole event.
             console.error(
-              `append_patient_note failed for patient ${existing.patient_id}:`,
-              appendNoteError.message,
+              `Follow-up note was not saved for patient ${existing.patient_id}`,
             );
           }
         }
 
         console.log(
           `User ${userId} already registered as ${existing.patient_id}, appending message + notes`,
+          followup
+            ? {
+              saved: followup.saved,
+              recontact: followup.recontact,
+              opened: followup.opened,
+              duplicate: followup.duplicate,
+              used_fallback: followup.usedFallback,
+            }
+            : {},
         );
         continue;
       }
@@ -342,7 +366,13 @@ serve(async (req) => {
 async function appendLineMessageToLog(
   supabase: any,
   logId: string,
-  lineMessage: { text: string; timestamp: number; role: string },
+  lineMessage: {
+    text: string;
+    timestamp: number;
+    role: string;
+    event_id?: string;
+    patient_id?: string;
+  },
 ): Promise<any | null> {
   const { data, error } = await supabase.rpc("append_to_array_column", {
     p_table_name: "line_message_log",
