@@ -48,6 +48,13 @@ export const LINE_TALK_AI_LIMITS: EntryLimit[] = [
   { label: "all", limit: 500, windowSeconds: 86400, perClient: false },
 ];
 
+// A condolence application pasted into LINE after the site form failed. A person sends
+// one; the limit only stops a sender who keeps pasting.
+export const LINE_FORM_FALLBACK_LIMITS: EntryLimit[] = [
+  { label: "client", limit: 5, windowSeconds: 86400, perClient: true },
+  { label: "all", limit: 100, windowSeconds: 86400, perClient: false },
+];
+
 export type ConsumeLimit = (
   args: { p_scope: string; p_key: string; p_limit: number; p_window_seconds: number },
 ) => PromiseLike<{ data: unknown; error: unknown }>;
