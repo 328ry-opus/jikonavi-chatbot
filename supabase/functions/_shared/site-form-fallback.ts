@@ -56,6 +56,8 @@ export type MedicineFallback = {
   unreadable: string[];
   /** Name and a usable phone number are both present. */
   identified: boolean;
+  /** An item appears twice or out of the form's order: the answers cannot be trusted. */
+  irregular: boolean;
 };
 
 function halfWidthDigits(value: string): string {
@@ -82,8 +84,6 @@ function parseDateValue(raw: string): string {
 
 // Order in which formSummary() prints the items.
 const FIELD_ORDER = Object.values(MEDICINE_FALLBACK_LABELS);
-// Printed after the free-text notes, always as the last lines.
-const TAIL_KEYS = ["error_code", "interview_consent"];
 // Items where a second line is part of the answer.
 const MULTILINE_KEYS = new Set(["notes", "address"]);
 
@@ -101,39 +101,38 @@ function splitLabel(line: string): { key: string; label: string; value: string }
  * would refuse (dates, counts) are dropped and listed in `unreadable` so staff
  * can read what the applicant actually wrote.
  *
- * The applicant can type anything into the notes, including a line that looks
- * like one of the form's items. So an item is only read where the form prints
- * it: in the form's order, and the two closing items from the end of the text.
- * Everything else stays in the notes as written.
+ * The form prints every item once, in a fixed order. The applicant can still
+ * type a line that looks like an item into the notes or the address, and then
+ * nothing in the text says which line is the real answer. Such a text is marked
+ * `irregular` and left for staff to read instead of being guessed at. The one
+ * exception is an item that was left empty and is filled in further down, which
+ * is what people do when asked to add a missing name or phone number.
  */
 export function parseMedicineFallback(text: string): MedicineFallback {
   const raw: Record<string, string> = {};
   const labelOf: Record<string, string> = {};
-  const lines = text.trimStart().slice(MEDICINE_FALLBACK_HEADER.length).split(/\r\n|\r|\n/);
-  while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
-
-  let tailFound = false;
-  for (const key of TAIL_KEYS) {
-    const last = lines.length ? splitLabel(lines[lines.length - 1]) : null;
-    if (last?.key !== key) continue;
-    raw[key] = last.value;
-    labelOf[key] = last.label;
-    tailFound = true;
-    lines.pop();
-  }
-
+  const loose: string[] = [];
   let current = "";
   let position = -1;
-  const loose: string[] = [];
-  for (const line of lines) {
+  let irregular = false;
+  for (const line of text.trimStart().slice(MEDICINE_FALLBACK_HEADER.length).split(/\r\n|\r|\n/)) {
     const found = splitLabel(line);
-    const order = found ? FIELD_ORDER.indexOf(found.key) : -1;
-    const isTail = found ? TAIL_KEYS.includes(found.key) : false;
-    if (found && order > position && !(isTail && tailFound)) {
+    if (found) {
+      const order = FIELD_ORDER.indexOf(found.key);
+      if (!(found.key in raw) && order > position) {
+        position = order;
+      } else if (raw[found.key]) {
+        // Written twice, or out of the form's order, with an answer already there.
+        irregular = true;
+        continue;
+      } else if (!(found.key in raw)) {
+        // First appearance, but after a later item: not the form's layout.
+        irregular = true;
+        continue;
+      }
       raw[found.key] = found.value;
       labelOf[found.key] = found.label;
       current = found.key;
-      position = order;
     } else if (line.trim()) {
       if (MULTILINE_KEYS.has(current)) raw[current] = `${raw[current]}\n${line.trim()}`.trim();
       // A stray line under a one-line item is kept for staff rather than dropped.
@@ -214,6 +213,7 @@ export function parseMedicineFallback(text: string): MedicineFallback {
     errorCode,
     unreadable,
     identified: Boolean(fields.name && fields.phone),
+    irregular,
   };
 }
 
@@ -288,13 +288,21 @@ export function receivedReply(requestId: string): string {
   ].join("\n");
 }
 export const UNIDENTIFIED_REPLY = [
-  "メッセージを受け取りました。お名前と電話番号を確認できなかったため、まだ申請として受け付けできておりません。",
+  "メッセージを受け取りました。お名前と電話番号を確認できなかったため、まだ申請として受け付けが完了しておりません。",
   "",
-  "お手数ですが、先ほどの文章にお名前と電話番号を書き添えて、全文をもう一度お送りください。",
+  "お手数ですが、先ほどの文章の「お名前：」「電話番号：」の後ろにご記入のうえ、全文をもう一度お送りください。",
 ].join("\n");
+// Also used when the text cannot be read reliably: no receipt is claimed.
 export const STORE_FAILED_REPLY = "メッセージを受け取りました。担当者が内容を確認し、必要な場合はご連絡します。";
 
-export type FallbackOutcome = "registered" | "resumed" | "duplicate" | "unidentified" | "limited" | "store_failed";
+export type FallbackOutcome =
+  | "registered"
+  | "resumed"
+  | "duplicate"
+  | "unidentified"
+  | "irregular"
+  | "limited"
+  | "store_failed";
 
 export type FallbackDeps = {
   /** Insert into site_form_submissions. */
@@ -308,8 +316,8 @@ export type FallbackDeps = {
   /** Resolves true when the notice was accepted. */
   notifyStaff: (payload: Record<string, string>) => Promise<boolean>;
   reply: (text: string) => Promise<void>;
-  /** Whether staff were already told about this stored application. */
-  wasAnnounced: (requestId: string) => Promise<boolean>;
+  /** The row an earlier delivery of the same LINE event stored, if any. */
+  findStored: (requestId: string) => Promise<{ announced: boolean } | null>;
   markAnnounced: (requestId: string) => Promise<void>;
   log?: (message: string) => void;
 };
@@ -326,12 +334,40 @@ export async function intakeMedicineFallback(
 ): Promise<{ outcome: FallbackOutcome; requestId?: string }> {
   const log = deps.log ?? ((message: string) => console.error(message));
 
-  // Checked first: it caps everything one sender can cause, including the talk
-  // log entry, the replies and the staff e-mails.
+  // The same LINE event again (redelivery). It finishes what the first run
+  // left undone and is not counted against the sender: only LINE can replay an
+  // event, and a run that died after storing must still reach staff.
+  const requestId = await fallbackRequestId(eventId, receivedAt);
+  const stored = eventId ? await deps.findStored(requestId) : null;
+  if (stored) {
+    await routeStored(requestId, deps, log);
+    if (stored.announced) return { outcome: "duplicate", requestId };
+    const fields = fieldsForIntake(parseMedicineFallback(text));
+    await announce(requestId, fields, deps, log);
+    return { outcome: "resumed", requestId };
+  }
+
+  // Checked before anything is written: it caps everything one sender can
+  // cause, including the talk log entry, the replies and the staff e-mails.
   if (await deps.overLimit()) return { outcome: "limited" };
   await deps.keepMessage();
 
   const parsed = parseMedicineFallback(text);
+  if (parsed.irregular) {
+    await deps.notifyStaff({
+      source: "site-medicine",
+      request_id: "",
+      name: "",
+      phone: "",
+      email: "",
+      page_url: "",
+      detail:
+        "※LINEで届いたお見舞金の申請です。同じ項目が2回書かれているなど、自動では読み取れない形だったため、申請としては登録していません。LINEのトークをご確認ください。",
+    });
+    await deps.reply(STORE_FAILED_REPLY);
+    return { outcome: "irregular" };
+  }
+
   if (!parsed.identified) {
     await deps.notifyStaff({
       source: "site-medicine",
@@ -347,7 +383,6 @@ export async function intakeMedicineFallback(
     return { outcome: "unidentified" };
   }
 
-  const requestId = await fallbackRequestId(eventId, receivedAt);
   const fields = fieldsForIntake(parsed);
   const { error: insertError } = await deps.insertSubmission({
     request_id: requestId,
@@ -358,7 +393,9 @@ export async function intakeMedicineFallback(
     user_agent: "line-fallback",
   });
 
-  if (insertError && insertError.code !== "23505") {
+  // Two deliveries of one event racing each other: the other one finishes it.
+  if (insertError?.code === "23505") return { outcome: "duplicate", requestId };
+  if (insertError) {
     log(`Condolence fallback was not stored: ${insertError.code || "unknown"}`);
     await deps.notifyStaff({
       source: "site-medicine",
@@ -374,24 +411,35 @@ export async function intakeMedicineFallback(
     return { outcome: "store_failed" };
   }
 
-  // The routing function is safe to repeat: a row that is already routed is
-  // returned as-is, and a row left unrouted by an earlier crash is completed.
+  await routeStored(requestId, deps, log);
+  await announce(requestId, fields, deps, log);
+  return { outcome: "registered", requestId };
+}
+
+// The routing function is safe to repeat: a row that is already routed is
+// returned as-is, and a row left unrouted by an earlier crash is completed.
+async function routeStored(requestId: string, deps: FallbackDeps, log: (message: string) => void) {
   try {
     const routed = await deps.route(requestId);
     const data = routed.data as { ok?: boolean } | null;
-    if (routed.error || data?.ok === false) {
-      // The row stays in site_form_submissions, where the CRM shows it for a staff retry.
-      log(`Condolence fallback was stored but not routed: ${requestId}`);
-    }
+    if (!routed.error && data?.ok !== false) return;
   } catch {
-    log(`Condolence fallback was stored but not routed: ${requestId}`);
+    // Reported below.
   }
+  // The row stays in site_form_submissions, where the CRM shows it for a staff retry.
+  log(`Condolence fallback was stored but not routed: ${requestId}`);
+}
 
-  // Same LINE event delivered again. Stop only when staff were already told: a
-  // run that stored the row and then died must still announce it.
-  if (insertError && await deps.wasAnnounced(requestId)) return { outcome: "duplicate", requestId };
-
-  const announced = await deps.notifyStaff({
+// Same as the site form: when the staff e-mail cannot be sent the application is
+// still in the CRM's condolence list (with its menu count), so nothing is lost;
+// the row simply keeps notified_at empty.
+async function announce(
+  requestId: string,
+  fields: Record<string, string>,
+  deps: FallbackDeps,
+  log: (message: string) => void,
+) {
+  const accepted = await deps.notifyStaff({
     source: "site-medicine",
     request_id: requestId,
     name: fields.name,
@@ -400,8 +448,7 @@ export async function intakeMedicineFallback(
     page_url: "",
     detail: staffDetail(fields),
   });
-  if (announced) await deps.markAnnounced(requestId);
+  if (accepted) await deps.markAnnounced(requestId);
   else log(`Condolence fallback staff notice was not accepted: ${requestId}`);
   await deps.reply(receivedReply(requestId));
-  return { outcome: insertError ? "resumed" : "registered", requestId };
 }

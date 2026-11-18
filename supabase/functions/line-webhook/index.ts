@@ -428,10 +428,10 @@ async function handleMedicineFallback(
         }),
       keepMessage,
       notifyStaff: (payload) => postStaffNotice(payload),
-      wasAnnounced: async (requestId) => {
+      findStored: async (requestId) => {
         const { data } = await supabase.from("site_form_submissions")
           .select("notified_at").eq("request_id", requestId).maybeSingle();
-        return Boolean(data?.notified_at);
+        return data ? { announced: Boolean(data.notified_at) } : null;
       },
       markAnnounced: async (requestId) => {
         const { error } = await supabase.from("site_form_submissions")
