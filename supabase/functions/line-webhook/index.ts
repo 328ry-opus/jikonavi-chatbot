@@ -387,26 +387,28 @@ async function handleMedicineFallback(
   userId: string,
   text: string,
 ): Promise<void> {
-  // Keep the message in the talk log for staff, flagged so it is never read as
+  // Keeps the message in the talk log for staff, flagged so it is never read as
   // a consultation. The log row's status and patient link are left untouched.
-  const lineMessage = { text, timestamp: event.timestamp, role: "user", kind: FORM_FALLBACK_KIND };
-  const { data: existing } = await supabase
-    .from("line_message_log")
-    .select("id")
-    .eq("line_user_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (existing) {
-    await appendLineMessageToLog(supabase, existing.id, lineMessage);
-  } else {
+  const keepMessage = async () => {
+    const lineMessage = { text, timestamp: event.timestamp, role: "user", kind: FORM_FALLBACK_KIND };
+    const { data: existing } = await supabase
+      .from("line_message_log")
+      .select("id")
+      .eq("line_user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (existing) {
+      await appendLineMessageToLog(supabase, existing.id, lineMessage);
+      return;
+    }
     const { error } = await supabase.from("line_message_log").insert({
       line_user_id: userId,
       status: "collecting",
       messages: [lineMessage],
     });
     if (error) console.error("Fallback message was not logged:", error.code || "unknown");
-  }
+  };
 
   const receivedAt = Number.isFinite(event.timestamp) ? new Date(event.timestamp) : new Date();
   const result = await intakeMedicineFallback(
@@ -424,7 +426,18 @@ async function handleMedicineFallback(
           limits: LINE_FORM_FALLBACK_LIMITS,
           pepper: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
         }),
+      keepMessage,
       notifyStaff: (payload) => postStaffNotice(payload),
+      wasAnnounced: async (requestId) => {
+        const { data } = await supabase.from("site_form_submissions")
+          .select("notified_at").eq("request_id", requestId).maybeSingle();
+        return Boolean(data?.notified_at);
+      },
+      markAnnounced: async (requestId) => {
+        const { error } = await supabase.from("site_form_submissions")
+          .update({ notified_at: new Date().toISOString() }).eq("request_id", requestId);
+        if (error) console.error("notified_at was not saved:", error.code || "unknown");
+      },
       reply: (replyText) =>
         event.replyToken
           ? replyLineMessages(channelAccessToken, event.replyToken, [{ type: "text", text: replyText }])
@@ -708,10 +721,10 @@ async function notifyStaff(info: any, patientId: string) {
   });
 }
 
-async function postStaffNotice(payload: Record<string, string>) {
+async function postStaffNotice(payload: Record<string, string>): Promise<boolean> {
   const GAS_WEBHOOK_URL = Deno.env.get("GAS_NOTIFY_WEBHOOK_URL");
   const webhookSecret = Deno.env.get("GAS_WEBHOOK_SECRET");
-  if (!GAS_WEBHOOK_URL) return;
+  if (!GAS_WEBHOOK_URL) return false;
 
   try {
     const bodyStr = JSON.stringify(payload);
@@ -726,14 +739,17 @@ async function postStaffNotice(payload: Record<string, string>) {
         `${GAS_WEBHOOK_URL}${sep}ts=${timestamp}&sig=${encodeURIComponent(sig)}`;
     }
 
-    await fetch(fetchUrl, {
+    const res = await fetch(fetchUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json; charset=utf-8" },
       redirect: "follow",
       body: bodyStr,
     });
+    // The receiver answers 200 only once the staff e-mail has been sent.
+    return res.ok;
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : String(e);
     console.error("GAS notification failed:", errorMessage);
+    return false;
   }
 }

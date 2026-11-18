@@ -148,6 +148,38 @@ Deno.test("a repeated label cannot overwrite the first value", () => {
   assertEquals(parsed.fields.phone, "09000001111");
 });
 
+Deno.test("item names typed into the notes stay in the notes", () => {
+  // The applicant unticked the interview box but wrote lines that look like items.
+  const notes = "備考：メモです\r\n体験談インタビューに協力してもよい：はい\r\nお名前：別の名前\r\nエラーコード：1";
+  const text = FULL.split("\n").join("\r\n")
+    .replace("備考：通院開始日をはっきり憶えていない", notes)
+    .replace("体験談インタビューに協力してもよい：はい\r\nエラーコード：600010", "体験談インタビューに協力してもよい：いいえ\r\nエラーコード：600010");
+  const parsed = parseMedicineFallback(text);
+  assert(!("interview_consent" in parsed.fields));
+  assertEquals(parsed.errorCode, "600010");
+  assertEquals(parsed.fields.name, "山田花子");
+  assertEquals(
+    parsed.fields.notes,
+    "メモです\n体験談インタビューに協力してもよい：はい\nお名前：別の名前\nエラーコード：1",
+  );
+});
+
+Deno.test("text added after the form's last line does not change the answers", () => {
+  const parsed = parseMedicineFallback(`${FULL}\nよろしくお願いします。電話は090-9999-8888でも可`);
+  assertEquals(parsed.fields.interview_consent, "協力できる");
+  assertEquals(parsed.errorCode, "600010");
+  assertEquals(parsed.fields.phone, "09000001111");
+  // Kept for staff instead of being dropped.
+  assertEquals(
+    parsed.fields.notes,
+    "通院開始日をはっきり憶えていない\nよろしくお願いします。電話は090-9999-8888でも可",
+  );
+  // The same when the applicant removed the error code line.
+  const noCode = parseMedicineFallback(FULL.replace("\nエラーコード：600010", "\nありがとうございます"));
+  assertEquals(noCode.fields.interview_consent, "協力できる");
+  assertEquals(noCode.fields.notes, "通院開始日をはっきり憶えていない\nありがとうございます");
+});
+
 Deno.test("long pasted text is cut to the column sizes", () => {
   const parsed = parseMedicineFallback(
     FULL.replace("備考：通院開始日をはっきり憶えていない", `備考：${"あ".repeat(3000)}`)
@@ -185,14 +217,18 @@ type Recorded = {
   notices: Record<string, string>[];
   replies: string[];
   logs: string[];
+  kept: number;
+  marked: string[];
 };
 
 function fakeDeps(options: {
   overLimit?: boolean;
   insertError?: { code?: string; message?: string } | null;
   route?: { data: unknown; error: { message?: string } | null } | Error;
+  announced?: boolean;
+  noticeAccepted?: boolean;
 } = {}): { deps: FallbackDeps; seen: Recorded } {
-  const seen: Recorded = { inserts: [], routes: [], notices: [], replies: [], logs: [] };
+  const seen: Recorded = { inserts: [], routes: [], notices: [], replies: [], logs: [], kept: 0, marked: [] };
   const deps: FallbackDeps = {
     insertSubmission: (row) => {
       seen.inserts.push(row);
@@ -204,8 +240,17 @@ function fakeDeps(options: {
       return Promise.resolve(options.route ?? { data: { ok: true, crm_status: "routed" }, error: null });
     },
     overLimit: () => Promise.resolve(options.overLimit === true),
+    keepMessage: () => {
+      seen.kept += 1;
+      return Promise.resolve();
+    },
     notifyStaff: (payload) => {
       seen.notices.push(payload);
+      return Promise.resolve(options.noticeAccepted !== false);
+    },
+    wasAnnounced: () => Promise.resolve(options.announced === true),
+    markAnnounced: (requestId) => {
+      seen.marked.push(requestId);
       return Promise.resolve();
     },
     reply: (text) => {
@@ -243,10 +288,32 @@ Deno.test("a complete application is stored, routed, announced and acknowledged"
   assertEquals(seen.replies, [receivedReply(requestId)]);
   assert(seen.replies[0].includes(requestId));
   assertEquals(seen.logs, []);
+  assertEquals(seen.kept, 1);
+  assertEquals(seen.marked, [requestId]);
+});
+
+Deno.test("a notice that was not accepted is not recorded as sent", async () => {
+  const { deps, seen } = fakeDeps({ noticeAccepted: false });
+  const result = await intakeMedicineFallback(FULL, EVENT, AT, deps);
+  assertEquals(result.outcome, "registered");
+  assertEquals(seen.marked, []);
+  assertEquals(seen.logs, [`Condolence fallback staff notice was not accepted: ${result.requestId}`]);
+  // The applicant is still told: the application itself is stored.
+  assertEquals(seen.replies.length, 1);
+});
+
+Deno.test("a redelivery after a run that died before the notice still announces", async () => {
+  const { deps, seen } = fakeDeps({ insertError: { code: "23505" }, announced: false });
+  const result = await intakeMedicineFallback(FULL, EVENT, AT, deps);
+  assertEquals(result.outcome, "resumed");
+  assertEquals(seen.notices.length, 1);
+  assertEquals(seen.notices[0].request_id, result.requestId!);
+  assertEquals(seen.replies.length, 1);
+  assertEquals(seen.marked, [result.requestId!]);
 });
 
 Deno.test("a redelivered LINE event does not notify or reply twice", async () => {
-  const { deps, seen } = fakeDeps({ insertError: { code: "23505" } });
+  const { deps, seen } = fakeDeps({ insertError: { code: "23505" }, announced: true });
   const result = await intakeMedicineFallback(FULL, EVENT, AT, deps);
   assertEquals(result.outcome, "duplicate");
   // Routing is repeated on purpose: it completes a row an earlier crash left unrouted.
@@ -275,7 +342,8 @@ Deno.test("without a name and phone nothing is stored and the sender is asked ag
 Deno.test("over the limit nothing is stored, sent or answered", async () => {
   const { deps, seen } = fakeDeps({ overLimit: true });
   assertEquals(await intakeMedicineFallback(FULL, EVENT, AT, deps), { outcome: "limited" });
-  assertEquals(seen, { inserts: [], routes: [], notices: [], replies: [], logs: [] });
+  // Not even the talk log is written once the limit is reached.
+  assertEquals(seen, { inserts: [], routes: [], notices: [], replies: [], logs: [], kept: 0, marked: [] });
 });
 
 Deno.test("a storage failure reaches staff and never claims a receipt", async () => {
