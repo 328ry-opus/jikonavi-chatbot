@@ -103,10 +103,9 @@ function splitLabel(line: string): { key: string; label: string; value: string }
  *
  * The form prints every item once, in a fixed order. The applicant can still
  * type a line that looks like an item into the notes or the address, and then
- * nothing in the text says which line is the real answer. Such a text is marked
- * `irregular` and left for staff to read instead of being guessed at. The one
- * exception is an item that was left empty and is filled in further down, which
- * is what people do when asked to add a missing name or phone number.
+ * nothing in the text says which line is the real answer (or whether it is an
+ * answer at all rather than a quote). Such a text is marked `irregular` and left
+ * for staff to read instead of being guessed at.
  */
 export function parseMedicineFallback(text: string): MedicineFallback {
   const raw: Record<string, string> = {};
@@ -119,17 +118,13 @@ export function parseMedicineFallback(text: string): MedicineFallback {
     const found = splitLabel(line);
     if (found) {
       const order = FIELD_ORDER.indexOf(found.key);
-      if (!(found.key in raw) && order > position) {
-        position = order;
-      } else if (raw[found.key]) {
-        // Written twice, or out of the form's order, with an answer already there.
-        irregular = true;
-        continue;
-      } else if (!(found.key in raw)) {
-        // First appearance, but after a later item: not the form's layout.
+      if (found.key in raw || order < position) {
+        // Written twice, or not where the form prints it. The line stays out of
+        // every item; staff read the original in the LINE talk.
         irregular = true;
         continue;
       }
+      position = order;
       raw[found.key] = found.value;
       labelOf[found.key] = found.label;
       current = found.key;
@@ -150,7 +145,9 @@ export function parseMedicineFallback(text: string): MedicineFallback {
 
   fields.name = short("name").slice(0, 100);
 
-  const phoneDigits = halfWidthDigits(raw.phone || "").replace(/[^0-9]/g, "");
+  // Digits and the usual separators only: "090… ではありません" is not a number.
+  const phoneText = halfWidthDigits(raw.phone || "").trim();
+  const phoneDigits = /^[0-9\s\-‐-―−－()（）]+$/.test(phoneText) ? phoneText.replace(/[^0-9]/g, "") : "";
   if (/^0\d{9,10}$/.test(phoneDigits)) fields.phone = phoneDigits;
   else {
     fields.phone = "";
@@ -262,16 +259,11 @@ export function staffDetail(fields: Record<string, string>): string {
  * Receipt number in the site form's shape (S + yymmdd + "-" + 8 hex). It is
  * derived from the LINE event id, so a redelivered event maps to the same row.
  */
-export async function fallbackRequestId(eventId: string | null, now: Date = new Date()): Promise<string> {
+export async function fallbackRequestId(eventId: string, now: Date = new Date()): Promise<string> {
   const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
   const ymd = jst.toISOString().slice(2, 10).replace(/-/g, "");
-  let hex: string;
-  if (eventId) {
-    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`line-fallback:${eventId}`));
-    hex = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
-  } else {
-    hex = crypto.randomUUID().replace(/-/g, "");
-  }
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`line-fallback:${eventId}`));
+  const hex = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
   return `S${ymd}-${hex.slice(0, 8).toUpperCase()}`;
 }
 
@@ -337,8 +329,8 @@ export async function intakeMedicineFallback(
   // The same LINE event again (redelivery). It finishes what the first run
   // left undone and is not counted against the sender: only LINE can replay an
   // event, and a run that died after storing must still reach staff.
-  const requestId = await fallbackRequestId(eventId, receivedAt);
-  const stored = eventId ? await deps.findStored(requestId) : null;
+  const requestId = eventId ? await fallbackRequestId(eventId, receivedAt) : "";
+  const stored = requestId ? await deps.findStored(requestId) : null;
   if (stored) {
     await routeStored(requestId, deps, log);
     if (stored.announced) return { outcome: "duplicate", requestId };
@@ -353,7 +345,9 @@ export async function intakeMedicineFallback(
   await deps.keepMessage();
 
   const parsed = parseMedicineFallback(text);
-  if (parsed.irregular) {
+  // Without an id for the event a redelivery could not be told apart and would
+  // be stored twice, so it goes to staff as well. LINE sends one on every event.
+  if (parsed.irregular || !requestId) {
     await deps.notifyStaff({
       source: "site-medicine",
       request_id: "",

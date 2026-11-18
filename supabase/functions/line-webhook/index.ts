@@ -413,7 +413,9 @@ async function handleMedicineFallback(
   const receivedAt = Number.isFinite(event.timestamp) ? new Date(event.timestamp) : new Date();
   const result = await intakeMedicineFallback(
     text,
-    normalizeEventId(event.webhookEventId),
+    // The message id identifies the same message when the event id is missing.
+    normalizeEventId(event.webhookEventId) ??
+      (/^\d{1,40}$/.test(String(event.message?.id ?? "")) ? `message:${event.message.id}` : null),
     receivedAt,
     {
       insertSubmission: (row) => supabase.from("site_form_submissions").insert(row),

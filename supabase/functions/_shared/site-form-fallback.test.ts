@@ -168,13 +168,25 @@ Deno.test("an item written twice makes the text irregular instead of being guess
   assert(!parseMedicineFallback(FULL).irregular);
 });
 
-Deno.test("an item left empty can be filled in further down", () => {
-  const text = FULL.replace("電話番号：09000001111", "電話番号：") + "\n電話番号：09000001111";
-  const parsed = parseMedicineFallback(text);
-  assert(!parsed.irregular);
-  assert(parsed.identified);
-  assertEquals(parsed.fields.phone, "09000001111");
-  assertEquals(parsed.fields.interview_consent, "協力できる");
+Deno.test("an empty item is never filled from a line further down", () => {
+  // The line may be a quote ("last time's application said ..."), not this answer.
+  const quoted = FULL.replace("通院開始日：2026年5月14日", "通院開始日：")
+    .replace("備考：通院開始日をはっきり憶えていない", "備考：前回の控えです\n通院開始日：2025年1月1日");
+  const parsed = parseMedicineFallback(quoted);
+  assert(parsed.irregular);
+  assertEquals(parsed.fields.visit_start, "");
+  // The same for a phone number added at the end instead of on its own line.
+  const appended = parseMedicineFallback(FULL.replace("電話番号：09000001111", "電話番号：") + "\n電話番号：09000001111");
+  assert(appended.irregular);
+  assert(!appended.identified);
+});
+
+Deno.test("a phone answer with words in it is not a phone number", () => {
+  const parsed = parseMedicineFallback(FULL.replace("電話番号：09000001111", "電話番号：09000001111ではありません"));
+  assertEquals(parsed.fields.phone, "");
+  assert(!parsed.identified);
+  assertEquals(parsed.unreadable, ["電話番号「09000001111ではありません」"]);
+  assertEquals(parseMedicineFallback(FULL.replace("電話番号：09000001111", "電話番号：090（0000）1111")).fields.phone, "09000001111");
 });
 
 Deno.test("free text after the form's last line is kept in the notes", () => {
@@ -224,7 +236,6 @@ Deno.test("the receipt number is stable for one LINE event", async () => {
   assert(/^S261119-[0-9A-F]{8}$/.test(first));
   assertEquals(await fallbackRequestId("01HZX8K3QJ5V7W9Y2B4D6F8H0M", at), first);
   assert(await fallbackRequestId("01HZX8K3QJ5V7W9Y2B4D6F8H0N", at) !== first);
-  assert(/^S261119-[0-9A-F]{8}$/.test(await fallbackRequestId(null, at)));
 });
 
 // ── Intake ──
@@ -353,6 +364,14 @@ Deno.test("two deliveries racing each other store and announce once", async () =
   assertEquals(result.outcome, "duplicate");
   assertEquals(seen.notices, []);
   assertEquals(seen.replies, []);
+});
+
+Deno.test("an event without an id is left for staff, since a redelivery could not be recognised", async () => {
+  const { deps, seen } = fakeDeps();
+  assertEquals(await intakeMedicineFallback(FULL, null, AT, deps), { outcome: "irregular" });
+  assertEquals(seen.inserts, []);
+  assertEquals(seen.replies, [STORE_FAILED_REPLY]);
+  assertEquals(seen.notices.length, 1);
 });
 
 Deno.test("an irregular text is left for staff and no receipt is claimed", async () => {
