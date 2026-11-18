@@ -5,7 +5,12 @@
  */
 import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { isOverIdentifiedLimit, LINE_TALK_AI_LIMITS } from "../_shared/public-entry-guard.ts";
+import {
+  isOverIdentifiedLimit,
+  LINE_FORM_FALLBACK_LIMITS,
+  LINE_TALK_AI_LIMITS,
+} from "../_shared/public-entry-guard.ts";
+import { intakeMedicineFallback, isMedicineFallback } from "../_shared/site-form-fallback.ts";
 
 import {
   generateHmacSignature,
@@ -139,6 +144,15 @@ serve(async (req) => {
         text_length: text.length,
       });
 
+      // A condolence application pasted from the site form after it could not be
+      // sent. It is an application, not a consultation: store it the way the site
+      // form does and keep it away from patient registration, the form guidance
+      // reply and the patient notes below.
+      if (isMedicineFallback(text)) {
+        await handleMedicineFallback(supabase, channelAccessToken, event, userId, text);
+        continue;
+      }
+
       // ── Atomic upsert: claim or get existing log for this user ──
       const { data: existing } = await supabase
         .from("line_message_log")
@@ -224,6 +238,13 @@ serve(async (req) => {
           ? appended.messages
           : [...(existing.messages || []), lineMessage];
 
+        // A log that so far holds only pasted applications was never greeted:
+        // this is the person's first consultation message, so guide them to
+        // the form exactly as a new user would be.
+        if (event.replyToken && isFallbackOnlyLog(existing.messages)) {
+          await replyFormGuidance(channelAccessToken, event.replyToken);
+        }
+
         // Try to extract patient info from accumulated messages. Past the limit the
         // message stays in the log for staff, and only the paid AI call is skipped.
         const overAiLimit = apiKey && await isOverIdentifiedLimit({
@@ -234,9 +255,9 @@ serve(async (req) => {
           pepper: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
         });
         if (apiKey && !overAiLimit) {
-          const allText = messages.filter((m: any) => m.role === "user").map((
-            m: any,
-          ) => m.text).join("\n");
+          const allText = messages.filter((m: any) =>
+            m.role === "user" && m.kind !== FORM_FALLBACK_KIND
+          ).map((m: any) => m.text).join("\n");
           const result = await tryExtractPatientInfo(apiKey, allText);
 
           if (
@@ -363,6 +384,83 @@ serve(async (req) => {
   }
 });
 
+// Marks a pasted site-form application inside line_message_log.messages.
+const FORM_FALLBACK_KIND = "form_fallback";
+
+function isFallbackOnlyLog(messages: unknown): boolean {
+  return Array.isArray(messages) && messages.length > 0 &&
+    messages.every((m: any) => m?.kind === FORM_FALLBACK_KIND);
+}
+
+async function handleMedicineFallback(
+  supabase: any,
+  channelAccessToken: string,
+  event: any,
+  userId: string,
+  text: string,
+): Promise<void> {
+  // Keeps the message in the talk log for staff, flagged so it is never read as
+  // a consultation. The log row's status and patient link are left untouched.
+  const keepMessage = async () => {
+    const lineMessage = { text, timestamp: event.timestamp, role: "user", kind: FORM_FALLBACK_KIND };
+    const { data: existing } = await supabase
+      .from("line_message_log")
+      .select("id")
+      .eq("line_user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (existing) {
+      await appendLineMessageToLog(supabase, existing.id, lineMessage);
+      return;
+    }
+    const { error } = await supabase.from("line_message_log").insert({
+      line_user_id: userId,
+      status: "collecting",
+      messages: [lineMessage],
+    });
+    if (error) console.error("Fallback message was not logged:", error.code || "unknown");
+  };
+
+  const receivedAt = Number.isFinite(event.timestamp) ? new Date(event.timestamp) : new Date();
+  const result = await intakeMedicineFallback(
+    text,
+    // The message id identifies the same message when the event id is missing.
+    normalizeEventId(event.webhookEventId) ??
+      (/^\d{1,40}$/.test(String(event.message?.id ?? "")) ? `message:${event.message.id}` : null),
+    receivedAt,
+    {
+      insertSubmission: (row) => supabase.from("site_form_submissions").insert(row),
+      route: (requestId) => supabase.rpc("route_site_form_submission", { p_request_id: requestId }),
+      overLimit: () =>
+        isOverIdentifiedLimit({
+          consume: (args) => supabase.rpc("consume_public_entry_limit", args),
+          subject: userId,
+          scope: "line_form_fallback",
+          limits: LINE_FORM_FALLBACK_LIMITS,
+          pepper: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+        }),
+      keepMessage,
+      notifyStaff: (payload) => postStaffNotice(payload),
+      findStored: async (requestId) => {
+        const { data } = await supabase.from("site_form_submissions")
+          .select("notified_at").eq("request_id", requestId).maybeSingle();
+        return data ? { announced: Boolean(data.notified_at) } : null;
+      },
+      markAnnounced: async (requestId) => {
+        const { error } = await supabase.from("site_form_submissions")
+          .update({ notified_at: new Date().toISOString() }).eq("request_id", requestId);
+        if (error) console.error("notified_at was not saved:", error.code || "unknown");
+      },
+      reply: (replyText) =>
+        event.replyToken
+          ? replyLineMessages(channelAccessToken, event.replyToken, [{ type: "text", text: replyText }])
+          : Promise.resolve(),
+    },
+  );
+  console.log("Condolence fallback handled:", { line_user_id: userId, outcome: result.outcome });
+}
+
 async function appendLineMessageToLog(
   supabase: any,
   logId: string,
@@ -372,6 +470,7 @@ async function appendLineMessageToLog(
     role: string;
     event_id?: string;
     patient_id?: string;
+    kind?: string;
   },
 ): Promise<any | null> {
   const { data, error } = await supabase.rpc("append_to_array_column", {
@@ -593,6 +692,14 @@ async function replyFormGuidance(
   channelAccessToken: string,
   replyToken: string,
 ): Promise<void> {
+  await replyLineMessages(channelAccessToken, replyToken, [FORM_GUIDANCE_FLEX]);
+}
+
+async function replyLineMessages(
+  channelAccessToken: string,
+  replyToken: string,
+  messages: unknown[],
+): Promise<void> {
   try {
     const res = await fetch("https://api.line.me/v2/bot/message/reply", {
       method: "POST",
@@ -602,35 +709,39 @@ async function replyFormGuidance(
       },
       body: JSON.stringify({
         replyToken,
-        messages: [FORM_GUIDANCE_FLEX],
+        messages,
       }),
     });
     if (!res.ok) {
-      console.error("Form guidance reply failed:", res.status, await res.text());
+      console.error("LINE reply failed:", res.status, await res.text());
     }
   } catch (e) {
-    // A failed reply must never break patient registration.
+    // A failed reply must never break patient registration or an intake.
     const msg = e instanceof Error ? e.message : String(e);
-    console.error("Form guidance reply error:", msg);
+    console.error("LINE reply error:", msg);
   }
 }
 
 // ── Notify staff via GAS webhook ──
 async function notifyStaff(info: any, patientId: string) {
+  await postStaffNotice({
+    source: "line",
+    type: "new_patient",
+    name: info.patient_name || "",
+    phone: info.phone || "",
+    area: info.preferred_area || "",
+    accident_detail: info.accident_detail || "",
+    patient_id: patientId,
+  });
+}
+
+async function postStaffNotice(payload: Record<string, string>): Promise<boolean> {
   const GAS_WEBHOOK_URL = Deno.env.get("GAS_NOTIFY_WEBHOOK_URL");
   const webhookSecret = Deno.env.get("GAS_WEBHOOK_SECRET");
-  if (!GAS_WEBHOOK_URL) return;
+  if (!GAS_WEBHOOK_URL) return false;
 
   try {
-    const bodyStr = JSON.stringify({
-      source: "line",
-      type: "new_patient",
-      name: info.patient_name || "",
-      phone: info.phone || "",
-      area: info.preferred_area || "",
-      accident_detail: info.accident_detail || "",
-      patient_id: patientId,
-    });
+    const bodyStr = JSON.stringify(payload);
     // Build URL with HMAC signature as query params (GAS can't read custom headers)
     let fetchUrl = GAS_WEBHOOK_URL;
     if (webhookSecret) {
@@ -642,14 +753,17 @@ async function notifyStaff(info: any, patientId: string) {
         `${GAS_WEBHOOK_URL}${sep}ts=${timestamp}&sig=${encodeURIComponent(sig)}`;
     }
 
-    await fetch(fetchUrl, {
+    const res = await fetch(fetchUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json; charset=utf-8" },
       redirect: "follow",
       body: bodyStr,
     });
+    // The receiver answers 200 only once the staff e-mail has been sent.
+    return res.ok;
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : String(e);
     console.error("GAS notification failed:", errorMessage);
+    return false;
   }
 }
