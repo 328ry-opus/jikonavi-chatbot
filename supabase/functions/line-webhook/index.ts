@@ -238,6 +238,13 @@ serve(async (req) => {
           ? appended.messages
           : [...(existing.messages || []), lineMessage];
 
+        // A log that so far holds only pasted applications was never greeted:
+        // this is the person's first consultation message, so guide them to
+        // the form exactly as a new user would be.
+        if (event.replyToken && isFallbackOnlyLog(existing.messages)) {
+          await replyFormGuidance(channelAccessToken, event.replyToken);
+        }
+
         // Try to extract patient info from accumulated messages. Past the limit the
         // message stays in the log for staff, and only the paid AI call is skipped.
         const overAiLimit = apiKey && await isOverIdentifiedLimit({
@@ -379,6 +386,11 @@ serve(async (req) => {
 
 // Marks a pasted site-form application inside line_message_log.messages.
 const FORM_FALLBACK_KIND = "form_fallback";
+
+function isFallbackOnlyLog(messages: unknown): boolean {
+  return Array.isArray(messages) && messages.length > 0 &&
+    messages.every((m: any) => m?.kind === FORM_FALLBACK_KIND);
+}
 
 async function handleMedicineFallback(
   supabase: any,
