@@ -43,7 +43,11 @@ Deno.test("only the condolence fallback header is recognised", () => {
   // The consultation fallback and ordinary talk keep their current handling.
   assert(!isMedicineFallback("【ご相談】フォームから送信できなかったため、LINEでお送りします。\nお名前：山田花子"));
   assert(!isMedicineFallback("お見舞金の申請をしたいです"));
-  assert(!isMedicineFallback(`こんにちは\n${FULL}`));
+  // A greeting above the paste: still an application, but left for staff to read.
+  assert(isMedicineFallback(`こんにちは\n${FULL}`));
+  assert(parseMedicineFallback(`こんにちは\n${FULL}`).irregular);
+  // The header quoted in the middle of a sentence is ordinary talk.
+  assert(!isMedicineFallback(`サイトに${MEDICINE_FALLBACK_HEADER}と出ました`));
   assertEquals(MEDICINE_FALLBACK_HEADER, FULL.split("\n")[0]);
 });
 

@@ -64,8 +64,13 @@ function halfWidthDigits(value: string): string {
   return value.replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0));
 }
 
+/**
+ * True when a line starts with the form's header. A greeting typed above the
+ * paste still makes it an application, not a consultation; the parser marks
+ * that text irregular so staff read it.
+ */
 export function isMedicineFallback(text: string): boolean {
-  return text.trimStart().startsWith(MEDICINE_FALLBACK_HEADER);
+  return text.split(/\r\n|\r|\n/).some((line) => line.trimStart().startsWith(MEDICINE_FALLBACK_HEADER));
 }
 
 function parseDateValue(raw: string): string {
@@ -113,8 +118,11 @@ export function parseMedicineFallback(text: string): MedicineFallback {
   const loose: string[] = [];
   let current = "";
   let position = -1;
-  let irregular = false;
-  for (const line of text.trimStart().slice(MEDICINE_FALLBACK_HEADER.length).split(/\r\n|\r|\n/)) {
+  const headerAt = text.indexOf(MEDICINE_FALLBACK_HEADER);
+  // Anything written above the header is outside the form's layout.
+  let irregular = headerAt < 0 || text.slice(0, headerAt).trim() !== "";
+  const body = headerAt < 0 ? "" : text.slice(headerAt + MEDICINE_FALLBACK_HEADER.length);
+  for (const line of body.split(/\r\n|\r|\n/)) {
     const found = splitLabel(line);
     if (found) {
       const order = FIELD_ORDER.indexOf(found.key);
